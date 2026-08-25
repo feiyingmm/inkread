@@ -50,16 +50,15 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
+      - name: Export NDK env
+        # ANDROID_NDK_LATEST_HOME 是 runner 机器环境变量,workflow 表达式读不到,须经 GITHUB_ENV 注入
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
       - name: Init android project
         run: npx tauri android init
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
       - name: Apply brand icons
         run: cp -r src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
       - name: Build APK (arm64, unsigned)
         run: npx tauri android build --apk --target aarch64
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
       - name: Sign APK
         run: |
           KS=/tmp/inkread.keystore
