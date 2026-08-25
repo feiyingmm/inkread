@@ -29,8 +29,8 @@ export const devBackend: Backend = {
   assetUrl: (repo, path) => `/api/raw?repo=${enc(repo)}&path=${enc(path)}`,
   gitStatus: (repo) => get<GitStatus>(`/api/status?repo=${enc(repo)}`),
   gitPull: (repo) => post<GitOpResult>(`/api/pull?repo=${enc(repo)}`),
+  gitPullForce: (repo) => post<GitOpResult>(`/api/pull-force?repo=${enc(repo)}`),
   gitSync: (repo, message) => post<GitOpResult>(`/api/sync?repo=${enc(repo)}`, { message }),
-  gitResolve: (repo, strategy) => post<GitOpResult>(`/api/resolve?repo=${enc(repo)}`, { strategy }),
   search: (repo, query) => get<SearchHit[]>(`/api/search?repo=${enc(repo)}&q=${enc(query)}`),
   openExternal: (url) => {
     window.open(url, '_blank', 'noopener')

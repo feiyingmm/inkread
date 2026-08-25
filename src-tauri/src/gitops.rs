@@ -24,6 +24,14 @@ pub struct GitOpResult {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conflict: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub divergent: Option<bool>,
+}
+
+impl GitOpResult {
+    fn simple(ok: bool, changed: bool, message: impl Into<String>) -> Self {
+        Self { ok, changed, message: message.into(), conflict: None, divergent: None }
+    }
 }
 
 fn open(path: &Path) -> Result<Repository, String> {
@@ -136,37 +144,58 @@ pub fn pull(path: &Path, tokens: HashMap<String, String>) -> Result<GitOpResult,
         .map_err(|e| e.message().to_string())?;
 
     if analysis.is_up_to_date() {
-        return Ok(GitOpResult {
-            ok: true,
-            changed: false,
-            message: "已是最新".into(),
-            conflict: None,
-        });
+        return Ok(GitOpResult::simple(true, false, "已是最新"));
     }
     if analysis.is_fast_forward() {
+        // 安全 checkout:本地未提交修改与更新冲突时报错,由前端引导「放弃本地并覆盖」
+        let target_oid = annotated.id();
         let refname = format!("refs/heads/{branch}");
+        if let Err(e) = repo.checkout_tree(
+            &repo
+                .find_object(target_oid, None)
+                .map_err(|e| e.message().to_string())?,
+            Some(CheckoutBuilder::default().safe()),
+        ) {
+            return Ok(GitOpResult {
+                ok: false,
+                changed: false,
+                message: format!("本地有未同步的修改,阻碍了拉取: {}", e.message()),
+                conflict: None,
+                divergent: Some(true),
+            });
+        }
         let mut reference = repo
             .find_reference(&refname)
             .map_err(|e| e.message().to_string())?;
         reference
-            .set_target(annotated.id(), "inkread: fast-forward")
+            .set_target(target_oid, "inkread: fast-forward")
             .map_err(|e| e.message().to_string())?;
         repo.set_head(&refname).map_err(|e| e.message().to_string())?;
-        repo.checkout_head(Some(CheckoutBuilder::default().force()))
-            .map_err(|e| e.message().to_string())?;
-        return Ok(GitOpResult {
-            ok: true,
-            changed: true,
-            message: "已拉取最新文档".into(),
-            conflict: None,
-        });
+        return Ok(GitOpResult::simple(true, true, "已拉取最新文档"));
     }
     Ok(GitOpResult {
         ok: false,
         changed: false,
-        message: "本地与远端已分叉,请先提交并推送本地变更".into(),
+        message: "本地与远端已分叉".into(),
         conflict: None,
+        divergent: Some(true),
     })
+}
+
+/// 放弃本地一切未推送内容,强制与远端一致(fetch + reset --hard 到远端;未跟踪文件保留)
+pub fn pull_force(path: &Path, tokens: HashMap<String, String>) -> Result<GitOpResult, String> {
+    let repo = open(path)?;
+    let branch = current_branch(&repo)?;
+    fetch_origin(&repo, &branch, tokens)?;
+    let fetch_head = repo
+        .find_reference("FETCH_HEAD")
+        .map_err(|e| e.message().to_string())?;
+    let target = fetch_head
+        .peel(git2::ObjectType::Commit)
+        .map_err(|e| e.message().to_string())?;
+    repo.reset(&target, git2::ResetType::Hard, None)
+        .map_err(|e| format!("重置失败: {}", e.message()))?;
+    Ok(GitOpResult::simple(true, true, "已放弃本地修改并与远端保持一致"))
 }
 
 pub fn sync(
@@ -213,12 +242,7 @@ pub fn sync(
     let mut po = PushOptions::new();
     po.remote_callbacks(make_callbacks(tokens.clone()));
     match remote.push(&[refspec.as_str()], Some(&mut po)) {
-        Ok(()) => Ok(GitOpResult {
-            ok: true,
-            changed: true,
-            message: "已提交并推送".into(),
-            conflict: None,
-        }),
+        Ok(()) => Ok(GitOpResult::simple(true, true, "已提交并推送")),
         Err(push_err) => {
             fetch_origin(&repo, &branch, tokens)?;
             let (_, behind) = ahead_behind(&repo, &branch).unwrap_or((0, 0));
@@ -228,14 +252,14 @@ pub fn sync(
                     changed: false,
                     message: "本地与远端存在冲突,请选择保留方式".into(),
                     conflict: Some(true),
+                    divergent: None,
                 })
             } else {
-                Ok(GitOpResult {
-                    ok: false,
-                    changed: false,
-                    message: format!("推送失败: {}", push_err.message()),
-                    conflict: None,
-                })
+                Ok(GitOpResult::simple(
+                    false,
+                    false,
+                    format!("推送失败: {}", push_err.message()),
+                ))
             }
         }
     }
@@ -257,62 +281,5 @@ pub fn clone(
         .map_err(|e| format!("克隆失败: {}", e.message()))
 }
 
-/// 冲突解决:调系统 git 做 rebase(桌面独有;Android 纯阅读场景不会产生本地提交)
-pub fn resolve(path: &Path, strategy: &str) -> Result<GitOpResult, String> {
-    #[cfg(target_os = "android")]
-    {
-        let _ = (path, strategy);
-        Err("请在桌面端处理冲突".into())
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        // rebase 语义:被重放的本地提交是 theirs —— 保留本地 = theirs,保留远端 = ours
-        let opt = if strategy == "local" { "theirs" } else { "ours" };
-        let rebase = std::process::Command::new("git")
-            .args(["pull", "--rebase", "-X", opt])
-            .current_dir(path)
-            .output()
-            .map_err(|e| format!("无法执行 git: {e}"))?;
-        if !rebase.status.success() {
-            let _ = std::process::Command::new("git")
-                .args(["rebase", "--abort"])
-                .current_dir(path)
-                .output();
-            return Ok(GitOpResult {
-                ok: false,
-                changed: false,
-                message: format!(
-                    "自动解决失败: {}",
-                    String::from_utf8_lossy(&rebase.stderr).chars().take(300).collect::<String>()
-                ),
-                conflict: None,
-            });
-        }
-        let push = std::process::Command::new("git")
-            .args(["push"])
-            .current_dir(path)
-            .output()
-            .map_err(|e| format!("无法执行 git: {e}"))?;
-        if !push.status.success() {
-            return Ok(GitOpResult {
-                ok: false,
-                changed: false,
-                message: format!(
-                    "推送失败: {}",
-                    String::from_utf8_lossy(&push.stderr).chars().take(300).collect::<String>()
-                ),
-                conflict: None,
-            });
-        }
-        Ok(GitOpResult {
-            ok: true,
-            changed: true,
-            message: if strategy == "local" {
-                "已按本地版本推送".into()
-            } else {
-                "已按远端版本合并推送".into()
-            },
-            conflict: None,
-        })
-    }
-}
+// 注:墨阅不代做合并 —— 真冲突一律提示用户用外部 git 工具处理,软件内只提供
+// 「放弃本地修改与远端一致」(pull_force,覆盖的是本地而非远程)。

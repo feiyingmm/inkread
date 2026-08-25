@@ -12,6 +12,15 @@
       </template>
     </div>
 
+    <button
+      v-if="editMode"
+      class="tbtn save-btn"
+      :class="{ 'is-on': dirty }"
+      :title="dirty ? '有未保存修改 (Ctrl+S)' : '已保存'"
+      @click="emit('save')"
+    >
+      {{ dirty ? '● 保存' : '已保存' }}
+    </button>
     <div v-if="canEdit" class="seg-group">
       <button :class="{ 'is-on': !editMode }" title="阅读视图 (Ctrl+E)" @click="emit('set-edit', false)">阅读</button>
       <button :class="{ 'is-on': editMode }" title="编辑模式 (Ctrl+E)" @click="emit('set-edit', true)">编辑</button>
@@ -47,6 +56,7 @@ const props = defineProps<{
   canForward: boolean
   canEdit: boolean
   editMode: boolean
+  dirty: boolean
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +68,7 @@ const emit = defineEmits<{
   forward: []
   'open-palette': []
   'set-edit': [on: boolean]
+  save: []
 }>()
 
 const settings = useSettings()

@@ -158,9 +158,9 @@ fn git_sync(
 }
 
 #[tauri::command]
-fn git_resolve(app: AppHandle, repo_id: String, strategy: String) -> Result<gitops::GitOpResult, String> {
+fn git_pull_force(app: AppHandle, repo_id: String) -> Result<gitops::GitOpResult, String> {
     let root = state::repo_path(&app, &repo_id)?;
-    gitops::resolve(&root, &strategy)
+    gitops::pull_force(&root, state::load_tokens(&app))
 }
 
 #[tauri::command]
@@ -245,8 +245,8 @@ pub fn run() {
             write_file,
             git_status,
             git_pull,
+            git_pull_force,
             git_sync,
-            git_resolve,
             search_repo,
             save_token,
             get_token

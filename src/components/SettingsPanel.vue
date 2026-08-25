@@ -53,12 +53,16 @@
       </div>
 
       <div class="set-group">
-        <div class="set-label">同步</div>
+        <div class="set-label">同步与保存</div>
         <div class="set-row">
           <button class="opt" :class="{ 'is-on': settings.autoPull }" @click="settings.autoPull = !settings.autoPull">
             启动时自动拉取 {{ settings.autoPull ? '开' : '关' }}
           </button>
+          <button class="opt" :class="{ 'is-on': settings.autoSave }" @click="settings.autoSave = !settings.autoSave">
+            编辑自动保存 {{ settings.autoSave ? '开' : '关' }}
+          </button>
         </div>
+        <div class="set-hint">自动保存开启后,停止输入 2 秒自动写入文件;关闭时用顶栏保存按钮或 Ctrl+S。</div>
       </div>
 
       <div class="set-group">

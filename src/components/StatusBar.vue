@@ -11,7 +11,9 @@
     </template>
     <span v-else class="sb-item">git 状态不可用</span>
     <span class="sb-flex"></span>
-    <span v-if="editMode" class="sb-item sb-hint">编辑模式 · Ctrl+S 保存 · Ctrl+E 返回阅读</span>
+    <span v-if="editMode" class="sb-item sb-hint">{{
+      autoSave ? '编辑模式 · 自动保存已开启 · Ctrl+E 返回阅读' : '编辑模式 · Ctrl+S 或顶栏按钮保存 · Ctrl+E 返回阅读'
+    }}</span>
     <button
       v-if="status && (status.dirtyCount > 0 || status.ahead > 0)"
       class="sb-sync"
@@ -30,6 +32,7 @@ defineProps<{
   status: GitStatus | null
   syncing: boolean
   editMode: boolean
+  autoSave: boolean
 }>()
 
 const emit = defineEmits<{ sync: [] }>()

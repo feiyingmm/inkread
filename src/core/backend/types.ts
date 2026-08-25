@@ -30,6 +30,8 @@ export interface GitOpResult {
   message: string
   /** push 被拒且 rebase 冲突,需要用户二选一 */
   conflict?: boolean
+  /** 拉取被本地修改/本地分叉阻碍,可提示「放弃本地并覆盖」 */
+  divergent?: boolean
 }
 
 export interface SearchHit {
@@ -53,9 +55,9 @@ export interface Backend {
   assetUrl(repoId: string, path: string): string
   gitStatus(repoId: string): Promise<GitStatus>
   gitPull(repoId: string): Promise<GitOpResult>
+  /** 放弃本地一切未推送内容,强制与远端一致(reset --hard 到上游;未跟踪文件保留) */
+  gitPullForce(repoId: string): Promise<GitOpResult>
   gitSync(repoId: string, message?: string): Promise<GitOpResult>
-  /** 冲突解决:local=以本地为准,remote=以远端为准 */
-  gitResolve(repoId: string, strategy: 'local' | 'remote'): Promise<GitOpResult>
   search(repoId: string, query: string): Promise<SearchHit[]>
   /** 外部链接用系统浏览器打开 */
   openExternal(url: string): Promise<void>

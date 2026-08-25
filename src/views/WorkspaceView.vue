@@ -59,6 +59,7 @@
           :can-forward="canForward"
           :can-edit="canEdit"
           :edit-mode="editMode"
+          :dirty="editorDirty"
           @toggle-side="sideOpen = !sideOpen"
           @toggle-toc="tocOpen = !tocOpen"
           @pull="doPull"
@@ -67,6 +68,7 @@
           @forward="router.forward()"
           @open-palette="openPalette('files')"
           @set-edit="setEdit"
+          @save="editorRef?.save()"
         />
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
@@ -97,8 +99,15 @@
           :repo-id="repo.currentRepoId"
           :path="currentPath"
           @saved="onEditorSaved"
+          @dirty="editorDirty = $event"
         />
-        <StatusBar :status="repo.status" :syncing="syncing" :edit-mode="editMode" @sync="doSync" />
+        <StatusBar
+          :status="repo.status"
+          :syncing="syncing"
+          :edit-mode="editMode"
+          :auto-save="settings.autoSave"
+          @sync="doSync"
+        />
       </main>
 
       <TocPanel
@@ -119,7 +128,13 @@
       @close="paletteOpen = false"
       @open="onPaletteOpen"
     />
-    <ConflictDialog v-if="conflictOpen" @resolve="doResolve" @cancel="conflictOpen = false" />
+    <SyncIssueDialog
+      v-if="issueMode"
+      :mode="issueMode"
+      :detail="issueDetail"
+      @close="issueMode = ''"
+      @discard="onDiscardLocal"
+    />
     <CloneDialog v-if="cloneOpen" @close="cloneOpen = false" @done="onCloneDone" />
   </div>
 </template>
@@ -135,7 +150,7 @@ import SettingsPanel from '@/components/SettingsPanel.vue'
 import Palette from '@/components/Palette.vue'
 import EditorView from '@/components/EditorView.vue'
 import StatusBar from '@/components/StatusBar.vue'
-import ConflictDialog from '@/components/ConflictDialog.vue'
+import SyncIssueDialog from '@/components/SyncIssueDialog.vue'
 import CloneDialog from '@/components/CloneDialog.vue'
 import { backend, isTauri } from '@/core/backend'
 import { useRepoStore } from '@/stores/repo'
@@ -163,8 +178,10 @@ const activeSlug = ref('')
 const mdView = ref<InstanceType<typeof MarkdownView> | null>(null)
 const editorRef = ref<InstanceType<typeof EditorView> | null>(null)
 const editMode = ref(false)
+const editorDirty = ref(false)
 const syncing = ref(false)
-const conflictOpen = ref(false)
+const issueMode = ref<'' | 'pull' | 'push'>('')
+const issueDetail = ref('')
 const cloneOpen = ref(false)
 let pendingAnchor = ''
 let pendingHighlight = ''
@@ -201,7 +218,8 @@ async function doSync(): Promise<void> {
       : 'docs: 更新文档'
     const r = await backend.gitSync(repo.currentRepoId, msg)
     if (r.conflict) {
-      conflictOpen.value = true
+      issueDetail.value = r.message
+      issueMode.value = 'push'
     } else {
       toast(r.message, !r.ok)
     }
@@ -305,17 +323,20 @@ async function onCloneDone(repoId: string): Promise<void> {
   await switchRepo(repoId)
 }
 
-async function doResolve(strategy: 'local' | 'remote'): Promise<void> {
-  conflictOpen.value = false
-  syncing.value = true
+/** 用户确认放弃本地修改:强制与远端一致,并刷新树与当前文档 */
+async function onDiscardLocal(): Promise<void> {
+  issueMode.value = ''
   try {
-    const r = await backend.gitResolve(repo.currentRepoId, strategy)
+    const r = await backend.gitPullForce(repo.currentRepoId)
     toast(r.message, !r.ok)
-    if (r.ok && strategy === 'remote') await repo.refresh()
+    if (r.ok) {
+      editMode.value = false
+      await repo.refresh()
+      mdView.value?.reload()
+    }
   } catch (e) {
-    toast(`处理失败:${(e as Error).message}`, true)
+    toast(`操作失败:${(e as Error).message}`, true)
   } finally {
-    syncing.value = false
     repo.refreshStatus()
   }
 }
@@ -403,6 +424,11 @@ function onTocJump(slug: string): void {
 
 async function doPull(): Promise<void> {
   const r = await repo.pull()
+  if (!r.ok && r.divergent) {
+    issueDetail.value = r.message
+    issueMode.value = 'pull'
+    return
+  }
   toast(r.message, !r.ok)
 }
 

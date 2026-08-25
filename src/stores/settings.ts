@@ -14,6 +14,7 @@ interface Persisted {
   fontSize: number
   serifBody: boolean
   autoPull: boolean
+  autoSave: boolean
 }
 
 function load(): Partial<Persisted> {
@@ -32,6 +33,7 @@ export const useSettings = defineStore('settings', () => {
   const fontSize = ref<number>(saved.fontSize ?? 16)
   const serifBody = ref<boolean>(saved.serifBody ?? false)
   const autoPull = ref<boolean>(saved.autoPull ?? true)
+  const autoSave = ref<boolean>(saved.autoSave ?? false)
 
   const media = window.matchMedia('(prefers-color-scheme: dark)')
   const sysDark = ref(media.matches)
@@ -40,7 +42,7 @@ export const useSettings = defineStore('settings', () => {
   const isDark = computed(() => mode.value === 'dark' || (mode.value === 'auto' && sysDark.value))
 
   watch(
-    [brand, mode, width, fontSize, serifBody, autoPull],
+    [brand, mode, width, fontSize, serifBody, autoPull, autoSave],
     () => {
       const data: Persisted = {
         brand: brand.value,
@@ -49,11 +51,12 @@ export const useSettings = defineStore('settings', () => {
         fontSize: fontSize.value,
         serifBody: serifBody.value,
         autoPull: autoPull.value,
+        autoSave: autoSave.value,
       }
       localStorage.setItem(KEY, JSON.stringify(data))
     },
     { deep: false },
   )
 
-  return { brand, mode, width, fontSize, serifBody, autoPull, isDark }
+  return { brand, mode, width, fontSize, serifBody, autoPull, autoSave, isDark }
 })

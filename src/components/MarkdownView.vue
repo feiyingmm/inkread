@@ -267,7 +267,7 @@ onBeforeUnmount(() => {
   scroller.value?.removeEventListener('scroll', onScroll)
 })
 
-defineExpose({ scrollToSlug, highlightText })
+defineExpose({ scrollToSlug, highlightText, reload: load })
 </script>
 
 <style scoped>

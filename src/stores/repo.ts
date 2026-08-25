@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { backend, type GitStatus, type RepoMeta, type TreeNode } from '@/core/backend'
+import { backend, type GitOpResult, type GitStatus, type RepoMeta, type TreeNode } from '@/core/backend'
 
 export const useRepoStore = defineStore('repo', () => {
   const repos = ref<RepoMeta[]>([])
@@ -54,7 +54,7 @@ export const useRepoStore = defineStore('repo', () => {
   }
 
   /** 返回 pull 结果消息;changed 时已刷新文件树 */
-  async function pull(): Promise<{ ok: boolean; changed: boolean; message: string }> {
+  async function pull(): Promise<GitOpResult> {
     pulling.value = true
     try {
       const r = await backend.gitPull(currentRepoId.value)

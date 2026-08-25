@@ -21,6 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   saved: []
   ready: []
+  dirty: [dirty: boolean]
 }>()
 
 const settings = useSettings()
@@ -30,24 +31,35 @@ const loadError = ref('')
 let vditor: Vditor | null = null
 let original = ''
 let editorReady = false
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 function isDirty(): boolean {
   if (!vditor || !editorReady) return false
   return vditor.getValue() !== original
 }
 
-async function save(): Promise<boolean> {
+async function save(silent = false): Promise<boolean> {
   if (!vditor || !editorReady) return false
   const value = vditor.getValue()
+  if (value === original) return true
   try {
     await backend.writeFile(props.repoId, props.path, value)
     original = value
-    toast('已保存')
+    emit('dirty', false)
+    if (!silent) toast('已保存')
     emit('saved')
     return true
   } catch (e) {
     toast(`保存失败:${(e as Error).message}`, true)
     return false
+  }
+}
+
+function onInput(): void {
+  emit('dirty', isDirty())
+  if (settings.autoSave) {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer)
+    autoSaveTimer = setTimeout(() => void save(true), 2000)
   }
 }
 
@@ -75,8 +87,10 @@ onMounted(async () => {
         'undo', 'redo', 'outline',
       ],
       counter: { enable: false },
+      input: () => onInput(),
       after: () => {
         editorReady = true
+        emit('dirty', false)
         emit('ready')
       },
     })
@@ -93,6 +107,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
   try {
     vditor?.destroy()
   } catch {

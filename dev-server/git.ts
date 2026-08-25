@@ -40,11 +40,28 @@ export async function gitStatus(repoPath: string) {
 export async function gitPull(repoPath: string) {
   const r = await run(repoPath, ['pull', '--ff-only'])
   if (r.code !== 0) {
-    return { ok: false, changed: false, message: (r.stderr || r.stdout).trim().slice(0, 500) }
+    const err = (r.stderr || r.stdout).trim()
+    // 本地未提交修改会被覆盖 / 本地提交与远端分叉 → 提示可强制覆盖
+    const divergent = /overwritten by merge|would be lost|Not possible to fast-forward|divergent|unstaged changes|uncommitted changes/i.test(err)
+    return {
+      ok: false,
+      changed: false,
+      divergent,
+      message: divergent ? '本地有未同步的修改,阻碍了拉取' : err.slice(0, 500),
+    }
   }
   const out = r.stdout.trim()
   const changed = !/Already up.to.date/i.test(out)
   return { ok: true, changed, message: changed ? '已拉取最新文档' : '已是最新' }
+}
+
+/** 放弃本地未推送内容,强制与远端一致(fetch + reset --hard 上游;未跟踪文件保留) */
+export async function gitPullForce(repoPath: string) {
+  const f = await run(repoPath, ['fetch'])
+  if (f.code !== 0) return { ok: false, changed: false, message: (f.stderr || f.stdout).trim().slice(0, 500) }
+  const r = await run(repoPath, ['reset', '--hard', '@{upstream}'])
+  if (r.code !== 0) return { ok: false, changed: false, message: (r.stderr || r.stdout).trim().slice(0, 500) }
+  return { ok: true, changed: true, message: '已放弃本地修改并与远端保持一致' }
 }
 
 /** add-all + commit + push;无变更时仅 push 未推送的提交 */
@@ -74,18 +91,4 @@ export async function gitSync(repoPath: string, message: string) {
   return { ok: true, changed: true, message: '已提交并推送' }
 }
 
-/**
- * 冲突解决后重推。
- * 注意 rebase 语义:被重放的本地提交是 theirs —— 保留本地 = -X theirs,保留远端 = -X ours。
- */
-export async function gitResolve(repoPath: string, strategy: 'local' | 'remote') {
-  const opt = strategy === 'local' ? 'theirs' : 'ours'
-  const rb = await run(repoPath, ['pull', '--rebase', '-X', opt])
-  if (rb.code !== 0) {
-    await run(repoPath, ['rebase', '--abort'])
-    return { ok: false, changed: false, message: '自动解决失败:' + (rb.stderr || rb.stdout).trim().slice(0, 300) }
-  }
-  const p = await run(repoPath, ['push'])
-  if (p.code !== 0) return { ok: false, changed: false, message: (p.stderr || p.stdout).trim().slice(0, 500) }
-  return { ok: true, changed: true, message: strategy === 'local' ? '已按本地版本推送' : '已按远端版本合并推送' }
-}
+// 注:墨阅不代做合并 —— rebase 真冲突时 gitSync 返回 conflict 提示,由用户用外部 git 工具处理。
