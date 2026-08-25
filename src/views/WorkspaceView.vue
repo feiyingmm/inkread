@@ -1,7 +1,7 @@
 <template>
   <div class="shell">
     <div class="card">
-      <aside class="side" :class="{ 'is-closed': !sideOpen }">
+      <aside class="side" :class="{ 'is-closed': !sideOpen }" :style="sideStyle">
         <div class="side-head">
           <div class="side-logo">墨</div>
           <button class="repo-switch" title="切换 / 添加文库" @click="repoMenuOpen = !repoMenuOpen">
@@ -36,6 +36,20 @@
       </aside>
 
       <main class="main">
+        <div
+          v-if="sideOpen && !isNarrow"
+          class="resizer resizer--left"
+          :class="{ 'is-active': resizing === 'side' }"
+          title="拖动调整文库宽度"
+          @mousedown="startResize('side', $event)"
+        ></div>
+        <div
+          v-if="tocOpen && toc.length > 0 && !isNarrow"
+          class="resizer resizer--right"
+          :class="{ 'is-active': resizing === 'toc' }"
+          title="拖动调整大纲宽度"
+          @mousedown="startResize('toc', $event)"
+        ></div>
         <TopBar
           :repo-name="repo.currentRepoId"
           :path="currentPath"
@@ -87,7 +101,13 @@
         <StatusBar :status="repo.status" :syncing="syncing" :edit-mode="editMode" @sync="doSync" />
       </main>
 
-      <TocPanel :items="toc" :active-slug="activeSlug" :open="tocOpen && toc.length > 0" @jump="onTocJump" />
+      <TocPanel
+        :items="toc"
+        :active-slug="activeSlug"
+        :open="tocOpen && toc.length > 0"
+        :style="tocStyle"
+        @jump="onTocJump"
+      />
     </div>
 
     <SettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
@@ -207,6 +227,48 @@ async function pickLocalRepo(): Promise<void> {
 }
 
 const repoMenuOpen = ref(false)
+
+// ---- 侧栏宽度拖拽 ----
+const sideWidth = ref(Number(localStorage.getItem('inkread:sidew')) || 264)
+const tocWidth = ref(Number(localStorage.getItem('inkread:tocw')) || 232)
+const resizing = ref<'' | 'side' | 'toc'>('')
+
+const sideStyle = computed(() =>
+  sideOpen.value && !isNarrow
+    ? { width: `${sideWidth.value}px`, transition: resizing.value === 'side' ? 'none' : undefined }
+    : undefined,
+)
+const tocStyle = computed(() =>
+  tocOpen.value && toc.value.length > 0 && !isNarrow
+    ? { width: `${tocWidth.value}px`, transition: resizing.value === 'toc' ? 'none' : undefined }
+    : undefined,
+)
+
+function startResize(which: 'side' | 'toc', e: MouseEvent): void {
+  e.preventDefault()
+  resizing.value = which
+  const startX = e.clientX
+  const startW = which === 'side' ? sideWidth.value : tocWidth.value
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+  const onMove = (ev: MouseEvent) => {
+    const delta = ev.clientX - startX
+    if (which === 'side') sideWidth.value = clamp(startW + delta, 180, 480)
+    else tocWidth.value = clamp(startW - delta, 160, 420)
+  }
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+    resizing.value = ''
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+    localStorage.setItem('inkread:sidew', String(sideWidth.value))
+    localStorage.setItem('inkread:tocw', String(tocWidth.value))
+  }
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
 
 async function switchRepo(id: string): Promise<void> {
   repoMenuOpen.value = false

@@ -257,6 +257,37 @@ button {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  position: relative;
+}
+
+/* 侧栏宽度拖拽手柄(骑在 main 与两侧栏的边界上) */
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 25;
+}
+.resizer--left {
+  left: -4px;
+}
+.resizer--right {
+  right: -4px;
+}
+.resizer::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.resizer:hover::after,
+.resizer.is-active::after {
+  background: var(--accent);
 }
 
 .topbar {
