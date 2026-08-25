@@ -66,6 +66,12 @@ jobs:
         run: npx tauri android init
       - name: Apply brand icons
         run: cp -r src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
+      - name: Grant storage permissions (本地仓库路径访问)
+        # 「添加本地仓库(输入路径)」需要读写应用外目录;Android 11+ 用户须在系统设置开启「所有文件访问」
+        run: |
+          M=src-tauri/gen/android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n    <application#' "$M"
+          grep -c "uses-permission" "$M"
       - name: Build APK (arm64, unsigned)
         run: npx tauri android build --apk --target aarch64
       - name: Sign APK

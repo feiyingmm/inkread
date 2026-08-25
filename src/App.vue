@@ -12,6 +12,10 @@ import { toasts } from '@/core/toast'
 
 const settings = useSettings()
 
+if (/android/i.test(navigator.userAgent)) {
+  document.documentElement.dataset.android = '1'
+}
+
 watchEffect(() => {
   const el = document.documentElement
   el.dataset.brand = settings.brand

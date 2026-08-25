@@ -1030,13 +1030,47 @@ button {
   transform: scale(0.94);
 }
 
-/* 窄窗口 / 手机:侧栏浮层化,TOC 换浮动球,顶栏精简 */
+/* 窄窗口 / 手机:全屏内容卡(黛青渐变只保留在状态栏区域),侧栏浮层化,TOC 换浮动球,顶栏精简 */
 @media (max-width: 900px) {
   .shell {
-    padding: 10px;
+    padding: 0;
+  }
+  :root[data-android='1'] .shell {
+    /* Android 状态栏叠在 WebView 上:顶部让位,渐变自然成为状态栏底色 */
+    padding-top: max(env(safe-area-inset-top, 0px), 30px);
   }
   .card {
     position: relative;
+    border-radius: 0;
+  }
+  :root[data-android='1'] .card {
+    border-radius: 14px 14px 0 0;
+  }
+  .tbtn {
+    height: 40px;
+    min-width: 40px;
+    font-size: 16px;
+  }
+  .topbar {
+    min-height: 56px;
+    gap: 4px;
+  }
+  .statusbar {
+    padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px));
+  }
+  .seg-group button {
+    height: 34px;
+    padding: 0 16px;
+  }
+  .back-top {
+    bottom: 120px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+  }
+  .fab-toc {
+    right: 16px;
+    bottom: 64px;
   }
   .side {
     position: absolute;

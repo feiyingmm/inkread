@@ -24,7 +24,7 @@
                 {{ r.name }}<span v-if="r.id === repo.currentRepoId" class="repo-check">✓</span>
               </button>
               <div class="repo-menu-sep"></div>
-              <button v-if="!isAndroid" class="repo-item" @click="onAddLocal">＋ 添加本地仓库…</button>
+              <button class="repo-item" @click="onAddLocal">＋ 添加本地仓库…</button>
               <button class="repo-item" @click="onAddClone">⇩ 克隆远程仓库…</button>
             </div>
           </template>
@@ -79,11 +79,15 @@
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
           <div class="sub">让每一篇 Markdown 静静展开,如书页般被阅读</div>
-          <div v-if="repo.repos.length === 0 && isTauri" class="sub" style="display: flex; gap: 10px">
-            <button v-if="!isAndroid" class="opt" style="height: 36px; font-size: 13.5px" @click="pickLocalRepo">
+          <div v-if="repo.repos.length === 0 && isTauri" class="sub" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center">
+            <button
+              class="opt"
+              style="height: 38px; font-size: 13.5px"
+              @click="isAndroid ? (localPathOpen = true) : pickLocalRepo()"
+            >
               添加本地 git 仓库…
             </button>
-            <button class="opt is-on" style="height: 36px; font-size: 13.5px" @click="cloneOpen = true">
+            <button class="opt is-on" style="height: 38px; font-size: 13.5px" @click="cloneOpen = true">
               克隆远程仓库…
             </button>
           </div>
@@ -145,6 +149,7 @@
       @discard="onDiscardLocal"
     />
     <CloneDialog v-if="cloneOpen" @close="cloneOpen = false" @done="onCloneDone" />
+    <LocalPathDialog v-if="localPathOpen" @close="localPathOpen = false" @done="onLocalPathDone" />
     <ChangesPanel
       v-if="changesOpen"
       :changes="repo.status?.changes ?? []"
@@ -185,6 +190,7 @@ import EditorView from '@/components/EditorView.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import SyncIssueDialog from '@/components/SyncIssueDialog.vue'
 import CloneDialog from '@/components/CloneDialog.vue'
+import LocalPathDialog from '@/components/LocalPathDialog.vue'
 import MobileTocSheet from '@/components/MobileTocSheet.vue'
 import ChangesPanel from '@/components/ChangesPanel.vue'
 import { backend, isTauri } from '@/core/backend'
@@ -432,7 +438,19 @@ function onAddLocal(): void {
     toast('开发模式请编辑 dev-server/repos.local.json 后刷新', true)
     return
   }
+  // Android 的系统目录选择器返回 content:// URI,git 无法使用 → 改为手动输入路径
+  if (isAndroid) {
+    localPathOpen.value = true
+    return
+  }
   void pickLocalRepo()
+}
+
+const localPathOpen = ref(false)
+
+async function onLocalPathDone(repoId: string): Promise<void> {
+  await repo.init()
+  await switchRepo(repoId)
 }
 
 function onAddClone(): void {
