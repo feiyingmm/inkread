@@ -91,6 +91,42 @@
           开发模式凭据走系统 git;仓库注册在 dev-server/repos.local.json。
         </div>
       </div>
+
+      <div class="set-group">
+        <div class="set-label">帮助</div>
+
+        <details class="help-fold">
+          <summary>快捷键</summary>
+          <table class="help-table">
+            <tbody>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>快速打开(空输入=最近阅读)</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>全文搜索</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>阅读 ↔ 编辑</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>保存(编辑模式)</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>/</kbd></td><td>渲染 ↔ 源码视图</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>收起 / 展开文库栏</td></tr>
+              <tr><td><kbd>Alt</kbd>+<kbd>←</kbd> / <kbd>→</kbd></td><td>后退 / 前进</td></tr>
+              <tr><td><kbd>Esc</kbd></td><td>关闭面板</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details class="help-fold">
+          <summary>使用要点</summary>
+          <div class="help-body">
+            <p>· 点击底部状态条「N 个未提交变更」查看本地改动明细并一键推送</p>
+            <p>· 点击面包屑中的目录名可在文库树中定位;标题旁箭头可折叠章节</p>
+            <p>· 编辑时粘贴截图会自动存入文档旁 assets/ 目录</p>
+            <p>· 同步遇到冲突时,墨阅不代为合并——请用 git 工具处理,或选择放弃本地修改</p>
+            <p>· 手机端:左上角开文库抽屉,右下角浮动球开目录,双指捏合调字号</p>
+          </div>
+        </details>
+
+        <div class="set-hint" style="display: flex; justify-content: space-between; align-items: center">
+          <span>墨阅 Inkread v{{ version }}</span>
+          <button class="opt" style="height: 26px; font-size: 11.5px" @click="openRepo">GitHub 仓库</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -106,6 +142,11 @@ const settings = useSettings()
 
 const tokenHost = ref('gitee.com')
 const tokenValue = ref('')
+const version = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
+
+function openRepo(): void {
+  void backend.openExternal('https://github.com/feiyingmm/inkread')
+}
 
 async function saveTok(): Promise<void> {
   if (!tokenValue.value.trim()) {

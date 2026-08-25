@@ -191,6 +191,69 @@ button {
   margin-top: 8px;
 }
 
+/* 设置面板内的帮助折叠区 */
+.help-fold {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.help-fold summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--t1);
+  padding: 8px 12px;
+  user-select: none;
+  list-style: none;
+}
+.help-fold summary::before {
+  content: '▸ ';
+  color: var(--t3);
+  font-size: 10px;
+}
+.help-fold[open] summary::before {
+  content: '▾ ';
+}
+.help-fold summary:hover {
+  background: var(--bg-hover);
+}
+.help-table {
+  width: 100%;
+  font-size: 12.5px;
+  border-collapse: collapse;
+}
+.help-table td {
+  padding: 5px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--t2);
+}
+.help-table td:first-child {
+  white-space: nowrap;
+  width: 42%;
+}
+.help-table kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-side);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--t1);
+}
+.help-body {
+  padding: 4px 12px 10px;
+  border-top: 1px solid var(--line);
+}
+.help-body p {
+  margin: 6px 0;
+  font-size: 12.5px;
+  color: var(--t2);
+  line-height: 1.7;
+}
+.help-body b {
+  color: var(--t1);
+}
+
 .side-body {
   flex: 1;
   overflow-y: auto;
