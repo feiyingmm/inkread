@@ -9,6 +9,13 @@ body,
 #app {
   height: 100%;
   margin: 0;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* 视口异常时露出的底色也保持品牌色,而非刺眼白 */
+html {
+  background: #1c3a52;
 }
 
 body {
@@ -261,6 +268,19 @@ button {
   padding: 4px 8px 16px;
 }
 
+/* 侧栏底部操作区:拉取 / 明暗 / 设置 */
+.side-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.sf-flex {
+  flex: 1;
+}
+
 /* 文件树 */
 .tree-item {
   user-select: none;
@@ -427,14 +447,27 @@ button {
   opacity: 0.5;
   cursor: default;
 }
-.tbtn .spin {
-  display: inline-block;
-  animation: spin 0.9s linear infinite;
+.save-btn {
+  gap: 4px;
 }
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.save-txt {
+  font-size: 12.5px;
+}
+
+/* 沉浸阅读:顶栏/状态条平滑收起 */
+.topbar,
+.statusbar {
+  transition: margin 0.28s ease, opacity 0.22s ease;
+}
+.topbar.chrome-hidden {
+  margin-top: -64px;
+  opacity: 0;
+  pointer-events: none;
+}
+.statusbar.chrome-hidden {
+  margin-bottom: -52px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .seg-group {
@@ -1047,13 +1080,42 @@ button {
     border-radius: 14px 14px 0 0;
   }
   .tbtn {
-    height: 40px;
-    min-width: 40px;
-    font-size: 16px;
+    height: 44px;
+    min-width: 44px;
+    font-size: 17px;
+  }
+  .tbtn svg {
+    width: 23px;
+    height: 23px;
+  }
+  .side-foot .tbtn svg {
+    width: 22px;
+    height: 22px;
   }
   .topbar {
-    min-height: 56px;
-    gap: 4px;
+    min-height: 60px;
+    gap: 2px;
+    padding: 8px 8px;
+  }
+  .crumbs {
+    font-size: 14px;
+  }
+  .tree-row {
+    font-size: 15px;
+    padding: 7px 9px;
+  }
+  .side-title {
+    font-size: 17px;
+  }
+  .side-repo {
+    font-size: 13px;
+  }
+  .statusbar {
+    font-size: 13px;
+    min-height: 38px;
+  }
+  .toc-item {
+    font-size: 14px;
   }
   .statusbar {
     padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px));
@@ -1071,6 +1133,41 @@ button {
   .fab-toc {
     right: 16px;
     bottom: 64px;
+  }
+
+  /* 命令面板手机适配:贴顶、占满宽、给键盘留空间 */
+  .palette {
+    width: calc(100% - 20px);
+    margin-top: 10px;
+    max-height: min(56dvh, 480px);
+  }
+  .palette-head {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .palette-input {
+    flex: 1 1 100%;
+    order: 3;
+    height: 44px;
+    font-size: 15px;
+    border-radius: var(--radius);
+  }
+
+  /* 手机输入框整体加高 */
+  .clone-card .palette-input,
+  .settings .palette-input {
+    height: 46px;
+    font-size: 15px;
+    border-radius: var(--radius);
+    border-width: 1.5px;
+  }
+  .settings .opt,
+  .clone-card .opt {
+    height: 38px;
+    font-size: 13.5px;
+  }
+  .conflict .opt {
+    height: 40px;
   }
   .side {
     position: absolute;
@@ -1101,11 +1198,5 @@ button {
   }
   .prose-wrap {
     padding: 20px 18px 70px;
-  }
-  .topbar {
-    padding: 8px 10px;
-  }
-  .crumbs {
-    font-size: 12.5px;
   }
 }

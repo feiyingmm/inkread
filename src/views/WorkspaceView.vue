@@ -35,6 +35,16 @@
           <div v-else-if="repo.tree.length === 0" class="tree-empty">仓库为空</div>
           <FileTree v-else :nodes="repo.tree" :current="currentPath" :reveal="treeReveal" @open="onOpenNode" />
         </div>
+        <div class="side-foot">
+          <button class="tbtn" title="拉取最新 (git pull)" :disabled="repo.pulling" @click="doPull">
+            <Icon name="refresh" :spin="repo.pulling" />
+          </button>
+          <button class="tbtn" :title="modeTitle" @click="cycleMode">
+            <Icon :name="modeIcon" />
+          </button>
+          <span class="sf-flex"></span>
+          <button class="tbtn" title="设置" @click="settingsOpen = true"><Icon name="sliders" /></button>
+        </div>
       </aside>
 
       <main class="main">
@@ -53,9 +63,9 @@
           @mousedown="startResize('toc', $event)"
         ></div>
         <TopBar
+          :class="{ 'chrome-hidden': chromeHidden }"
           :repo-name="repo.currentRepoId"
           :path="currentPath"
-          :pulling="repo.pulling"
           :toc-open="tocOpen"
           :can-back="canBack"
           :can-forward="canForward"
@@ -65,8 +75,6 @@
           :source-mode="sourceMode"
           @toggle-side="sideOpen = !sideOpen"
           @toggle-toc="tocOpen = !tocOpen"
-          @pull="doPull"
-          @open-settings="settingsOpen = true"
           @back="router.back()"
           @forward="router.forward()"
           @open-palette="openPalette('files')"
@@ -103,6 +111,7 @@
           @open="onOpenLink"
           @rendered="onRendered"
           @source-mode="sourceMode = $event"
+          @tap-blank="onTapBlank"
         />
         <EditorView
           v-else
@@ -113,6 +122,7 @@
           @dirty="editorDirty = $event"
         />
         <StatusBar
+          :class="{ 'chrome-hidden': chromeHidden }"
           :status="repo.status"
           :syncing="syncing"
           :edit-mode="editMode"
@@ -165,7 +175,7 @@
       title="目录"
       @click="tocSheetOpen = true"
     >
-      ☰
+      <Icon name="toc" :size="22" style="margin: 0 auto" />
     </button>
     <MobileTocSheet
       v-if="tocSheetOpen"
@@ -193,6 +203,7 @@ import CloneDialog from '@/components/CloneDialog.vue'
 import LocalPathDialog from '@/components/LocalPathDialog.vue'
 import MobileTocSheet from '@/components/MobileTocSheet.vue'
 import ChangesPanel from '@/components/ChangesPanel.vue'
+import Icon from '@/components/Icon.vue'
 import { backend, isTauri } from '@/core/backend'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
@@ -235,6 +246,22 @@ const tocSheetOpen = ref(false)
 const changesOpen = ref(false)
 const sourceMode = ref(false)
 const treeReveal = ref('')
+const chromeHidden = ref(false)
+
+// 明暗快捷循环(侧栏底部)
+const modeIcon = computed(() => (settings.mode === 'auto' ? 'theme-auto' : settings.mode === 'light' ? 'sun' : 'moon'))
+const modeTitle = computed(
+  () => `明暗模式:${settings.mode === 'auto' ? '跟随系统' : settings.mode === 'light' ? '浅色' : '深色'}(点击切换)`,
+)
+function cycleMode(): void {
+  settings.mode = settings.mode === 'auto' ? 'light' : settings.mode === 'light' ? 'dark' : 'auto'
+}
+
+/** 手机端沉浸阅读:点击正文空白处切换顶栏/状态条显隐 */
+function onTapBlank(): void {
+  if (!isNarrow.value || !currentPath.value || editMode.value) return
+  chromeHidden.value = !chromeHidden.value
+}
 
 function onCrumb(dirPath: string): void {
   sideOpen.value = true
@@ -523,6 +550,7 @@ function openFile(path: string, anchor?: string): void {
   }
   pendingAnchor = anchor ?? ''
   if (isNarrow.value) sideOpen.value = false
+  chromeHidden.value = false
   if (path === currentPath.value) {
     if (pendingAnchor) {
       mdView.value?.scrollToSlug(pendingAnchor)

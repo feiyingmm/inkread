@@ -257,6 +257,19 @@ fn export_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))
 }
 
+/// Android:探测是否已获得「所有文件访问」权限(可读外部存储根)
+#[tauri::command]
+fn check_storage_access() -> bool {
+    #[cfg(target_os = "android")]
+    {
+        std::fs::read_dir("/storage/emulated/0").is_ok()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        true
+    }
+}
+
 #[tauri::command]
 fn save_token(app: AppHandle, host: String, token: String) -> Result<(), String> {
     let mut map = state::load_tokens(&app);
@@ -352,6 +365,7 @@ pub fn run() {
             save_token,
             get_token,
             export_file,
+            check_storage_access,
             open_path,
             take_launch_file
         ])

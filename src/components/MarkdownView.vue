@@ -50,6 +50,7 @@ const emit = defineEmits<{
   open: [path: string, anchor?: string]
   rendered: []
   'source-mode': [on: boolean]
+  'tap-blank': []
 }>()
 
 const settings = useSettings()
@@ -392,6 +393,12 @@ function onClick(e: MouseEvent): void {
 
   if (el.tagName === 'IMG' && el.closest('.prose')) {
     lightboxSrc.value = (el as HTMLImageElement).src
+    return
+  }
+
+  // 未命中任何交互元素:视为点击空白(手机端切换沉浸阅读)
+  if (!el.closest('.lightbox') && !el.closest('.search-nav') && !el.closest('.back-top')) {
+    emit('tap-blank')
   }
 }
 
