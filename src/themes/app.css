@@ -431,12 +431,11 @@ button {
   cursor: default;
 }
 
-/* 滚动内容区 */
+/* 滚动内容区(不设全局 smooth:恢复阅读位置须瞬时,锚点跳转各自带平滑参数) */
 .content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  scroll-behavior: smooth;
 }
 
 /* 欢迎态 */
@@ -753,7 +752,60 @@ button {
   }
 }
 
-/* 窄窗口 / 手机:侧栏浮层化,TOC 隐藏 */
+/* 侧栏遮罩与关闭按钮(仅窄屏使用) */
+.side-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 15, 24, 0.42);
+  z-index: 29;
+  animation: fade-in 0.18s ease;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.side-close {
+  display: none;
+  border: none;
+  background: none;
+  color: var(--t3);
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.side-close:hover {
+  background: var(--bg-hover);
+  color: var(--t1);
+}
+
+/* 手机端 TOC 浮动球 */
+.fab-toc {
+  position: fixed;
+  right: 18px;
+  bottom: 58px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  box-shadow: 0 6px 20px rgba(10, 25, 40, 0.35);
+  z-index: 36;
+  cursor: pointer;
+}
+.fab-toc:active {
+  transform: scale(0.94);
+}
+
+/* 窄窗口 / 手机:侧栏浮层化,TOC 换浮动球,顶栏精简 */
 @media (max-width: 900px) {
   .shell {
     padding: 10px;
@@ -775,7 +827,17 @@ button {
     transform: translateX(-105%);
     box-shadow: none;
   }
+  .side-close {
+    display: block;
+  }
   .toc {
+    display: none;
+  }
+  .hide-narrow {
+    display: none;
+  }
+  .crumbs .seg:not(:last-child),
+  .crumbs .sep {
     display: none;
   }
   .prose-wrap {
@@ -785,6 +847,6 @@ button {
     padding: 8px 10px;
   }
   .crumbs {
-    font-size: 12px;
+    font-size: 12.5px;
   }
 }

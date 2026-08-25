@@ -27,7 +27,7 @@
     </div>
 
     <button
-      class="tbtn"
+      class="tbtn hide-narrow"
       :class="{ 'is-on': settings.width === 'wide' }"
       :title="settings.width === 'book' ? '展开宽页显示' : '收窄为书卷版心'"
       @click="settings.width = settings.width === 'book' ? 'wide' : 'book'"
@@ -38,7 +38,7 @@
     <button class="tbtn" title="拉取最新 (git pull)" :disabled="pulling" @click="emit('pull')">
       <span :class="{ spin: pulling }">⟳</span>
     </button>
-    <button class="tbtn" title="大纲" :class="{ 'is-on': tocOpen }" @click="emit('toggle-toc')">☰›</button>
+    <button class="tbtn hide-narrow" title="大纲" :class="{ 'is-on': tocOpen }" @click="emit('toggle-toc')">☰›</button>
     <button class="tbtn" title="设置" @click="emit('open-settings')">⚙</button>
   </div>
 </template>

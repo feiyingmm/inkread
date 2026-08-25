@@ -1,6 +1,7 @@
 <template>
   <div class="shell">
     <div class="card">
+      <div v-if="sideOpen && isNarrow" class="side-mask" @click="sideOpen = false"></div>
       <aside class="side" :class="{ 'is-closed': !sideOpen }" :style="sideStyle">
         <div class="side-head">
           <div class="side-logo">墨</div>
@@ -8,6 +9,7 @@
             <div class="side-title">墨阅</div>
             <div class="side-repo">{{ repo.currentRepoId || '添加文库…' }} <span class="repo-caret">▾</span></div>
           </button>
+          <button class="side-close" title="收起文库" @click="sideOpen = false">×</button>
           <template v-if="repoMenuOpen">
             <div class="repo-menu-mask" @click="repoMenuOpen = false"></div>
             <div class="repo-menu">
@@ -136,6 +138,22 @@
       @discard="onDiscardLocal"
     />
     <CloneDialog v-if="cloneOpen" @close="cloneOpen = false" @done="onCloneDone" />
+
+    <button
+      v-if="isNarrow && !editMode && currentPath && toc.length > 0"
+      class="fab-toc"
+      title="目录"
+      @click="tocSheetOpen = true"
+    >
+      ☰
+    </button>
+    <MobileTocSheet
+      v-if="tocSheetOpen"
+      :items="toc"
+      :active-slug="activeSlug"
+      @jump="onTocJump"
+      @close="tocSheetOpen = false"
+    />
   </div>
 </template>
 
@@ -152,6 +170,7 @@ import EditorView from '@/components/EditorView.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import SyncIssueDialog from '@/components/SyncIssueDialog.vue'
 import CloneDialog from '@/components/CloneDialog.vue'
+import MobileTocSheet from '@/components/MobileTocSheet.vue'
 import { backend, isTauri } from '@/core/backend'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
@@ -187,7 +206,10 @@ let pendingAnchor = ''
 let pendingHighlight = ''
 
 const isAndroid = /android/i.test(navigator.userAgent)
-const isNarrow = window.matchMedia('(max-width: 900px)').matches
+const narrowMq = window.matchMedia('(max-width: 900px)')
+const isNarrow = ref(narrowMq.matches)
+narrowMq.addEventListener('change', (e) => (isNarrow.value = e.matches))
+const tocSheetOpen = ref(false)
 
 const currentPath = computed(() => String(route.query.f ?? ''))
 // 手机端纯阅读:Android 上不提供编辑入口
@@ -252,12 +274,12 @@ const tocWidth = ref(Number(localStorage.getItem('inkread:tocw')) || 232)
 const resizing = ref<'' | 'side' | 'toc'>('')
 
 const sideStyle = computed(() =>
-  sideOpen.value && !isNarrow
+  sideOpen.value && !isNarrow.value
     ? { width: `${sideWidth.value}px`, transition: resizing.value === 'side' ? 'none' : undefined }
     : undefined,
 )
 const tocStyle = computed(() =>
-  tocOpen.value && toc.value.length > 0 && !isNarrow
+  tocOpen.value && toc.value.length > 0 && !isNarrow.value
     ? { width: `${tocWidth.value}px`, transition: resizing.value === 'toc' ? 'none' : undefined }
     : undefined,
 )
@@ -377,7 +399,7 @@ function openFile(path: string, anchor?: string): void {
     editMode.value = false
   }
   pendingAnchor = anchor ?? ''
-  if (isNarrow) sideOpen.value = false
+  if (isNarrow.value) sideOpen.value = false
   if (path === currentPath.value) {
     if (pendingAnchor) {
       mdView.value?.scrollToSlug(pendingAnchor)
