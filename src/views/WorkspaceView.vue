@@ -39,9 +39,12 @@
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
           <div class="sub">让每一篇 Markdown 静静展开,如书页般被阅读</div>
-          <div v-if="repo.repos.length === 0 && isTauri" class="sub">
-            <button class="opt" style="height: 36px; font-size: 13.5px" @click="pickLocalRepo">
+          <div v-if="repo.repos.length === 0 && isTauri" class="sub" style="display: flex; gap: 10px">
+            <button v-if="!isAndroid" class="opt" style="height: 36px; font-size: 13.5px" @click="pickLocalRepo">
               添加本地 git 仓库…
+            </button>
+            <button class="opt is-on" style="height: 36px; font-size: 13.5px" @click="cloneOpen = true">
+              克隆远程仓库…
             </button>
           </div>
           <div v-else class="sub" style="opacity: 0.7">从左侧文库选择一篇文档开始</div>
@@ -79,6 +82,7 @@
       @open="onPaletteOpen"
     />
     <ConflictDialog v-if="conflictOpen" @resolve="doResolve" @cancel="conflictOpen = false" />
+    <CloneDialog v-if="cloneOpen" @close="cloneOpen = false" @done="repo.init()" />
   </div>
 </template>
 
@@ -94,6 +98,7 @@ import Palette from '@/components/Palette.vue'
 import EditorView from '@/components/EditorView.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import ConflictDialog from '@/components/ConflictDialog.vue'
+import CloneDialog from '@/components/CloneDialog.vue'
 import { backend, isTauri } from '@/core/backend'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
@@ -122,6 +127,7 @@ const editorRef = ref<InstanceType<typeof EditorView> | null>(null)
 const editMode = ref(false)
 const syncing = ref(false)
 const conflictOpen = ref(false)
+const cloneOpen = ref(false)
 let pendingAnchor = ''
 let pendingHighlight = ''
 

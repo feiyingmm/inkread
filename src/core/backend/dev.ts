@@ -38,4 +38,6 @@ export const devBackend: Backend = {
   },
   addRepoLocal: () =>
     Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 添加仓库')),
+  addRepoClone: () =>
+    Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 添加仓库')),
 }

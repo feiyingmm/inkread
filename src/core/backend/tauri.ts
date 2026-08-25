@@ -24,4 +24,5 @@ export const tauriBackend: Backend = {
   search: (repoId, query) => invoke<SearchHit[]>('search_repo', { repoId, query }),
   openExternal: (url) => openUrl(url),
   addRepoLocal: (path) => invoke<RepoMeta>('add_repo_local', { path }),
+  addRepoClone: (url, token) => invoke<RepoMeta>('add_repo_clone', { url, token }),
 }

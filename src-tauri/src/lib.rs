@@ -57,6 +57,61 @@ fn add_repo_local(app: AppHandle, state: State<AppState>, path: String) -> Resul
 }
 
 #[tauri::command]
+fn add_repo_clone(
+    app: AppHandle,
+    state: State<AppState>,
+    url: String,
+    token: Option<String>,
+) -> Result<RepoMeta, String> {
+    let trimmed = url.trim().trim_end_matches('/');
+    if !trimmed.starts_with("https://") && !trimmed.starts_with("http://") {
+        return Err("仅支持 HTTPS 仓库地址".into());
+    }
+    let name = trimmed
+        .trim_end_matches(".git")
+        .rsplit('/')
+        .next()
+        .unwrap_or("repo")
+        .to_string();
+    // 私有仓库 token 先按 host 保存,克隆与后续 pull 共用
+    if let Some(t) = token.as_deref() {
+        if !t.is_empty() {
+            if let Some(host) = trimmed.split("://").nth(1).and_then(|s| s.split('/').next()) {
+                let mut map = state::load_tokens(&app);
+                map.insert(host.to_string(), t.to_string());
+                state::save_tokens(&app, &map)?;
+            }
+        }
+    }
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("repos");
+    std::fs::create_dir_all(&base).map_err(|e| e.to_string())?;
+    let dest = base.join(&name);
+    if dest.exists() {
+        return Err(format!("目录已存在: {}", dest.display()));
+    }
+    gitops::clone(trimmed, &dest, state::load_tokens(&app))?;
+
+    let mut repos = state.repos.lock().map_err(|e| e.to_string())?;
+    let mut id = name.clone();
+    let mut n = 1;
+    while repos.iter().any(|r| r.id == id) {
+        n += 1;
+        id = format!("{name}-{n}");
+    }
+    repos.push(RepoEntry {
+        id: id.clone(),
+        name: name.clone(),
+        path: dest.to_string_lossy().to_string(),
+    });
+    state::save_repos(&app, &repos)?;
+    Ok(RepoMeta { id, name })
+}
+
+#[tauri::command]
 fn list_tree(app: AppHandle, repo_id: String) -> Result<Vec<fsops::TreeNode>, String> {
     let root = state::repo_path(&app, &repo_id)?;
     fsops::build_tree(&root, "")
@@ -181,6 +236,21 @@ pub fn run() {
                     .unwrap(),
             }
         })
+        .invoke_handler(tauri::generate_handler![
+            list_repos,
+            add_repo_local,
+            add_repo_clone,
+            list_tree,
+            read_file,
+            write_file,
+            git_status,
+            git_pull,
+            git_sync,
+            git_resolve,
+            search_repo,
+            save_token,
+            get_token
+        ])
         .setup(|app| {
             let loaded = state::load_repos(app.handle());
             let state = app.state::<AppState>();

@@ -241,6 +241,22 @@ pub fn sync(
     }
 }
 
+/// 克隆远程仓库到指定目录
+pub fn clone(
+    url: &str,
+    dest: &Path,
+    tokens: HashMap<String, String>,
+) -> Result<(), String> {
+    let mut fo = FetchOptions::new();
+    fo.remote_callbacks(make_callbacks(tokens));
+    let mut builder = git2::build::RepoBuilder::new();
+    builder.fetch_options(fo);
+    builder
+        .clone(url, dest)
+        .map(|_| ())
+        .map_err(|e| format!("克隆失败: {}", e.message()))
+}
+
 /// 冲突解决:调系统 git 做 rebase(桌面独有;Android 纯阅读场景不会产生本地提交)
 pub fn resolve(path: &Path, strategy: &str) -> Result<GitOpResult, String> {
     #[cfg(target_os = "android")]

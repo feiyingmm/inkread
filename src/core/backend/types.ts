@@ -61,4 +61,6 @@ export interface Backend {
   openExternal(url: string): Promise<void>
   /** 桌面端:把本地已有 git 仓库加入文库 */
   addRepoLocal(path: string): Promise<RepoMeta>
+  /** 克隆远程仓库(HTTPS;私有仓库带 token,token 按 host 保存供后续 pull/push 复用) */
+  addRepoClone(url: string, token?: string): Promise<RepoMeta>
 }
