@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 
-function run(repoPath: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+export function run(repoPath: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(
       'git',

@@ -40,7 +40,24 @@ fn skip_entry(name: &str) -> bool {
     name.starts_with('.') || name == "node_modules"
 }
 
+/// 尊重 .gitignore:目录/文件被忽略则不进树、不进搜索(与文档库语义一致)
+fn is_ignored(repo: Option<&git2::Repository>, rel_path: &str) -> bool {
+    match repo {
+        Some(r) => r.is_path_ignored(rel_path).unwrap_or(false),
+        None => false,
+    }
+}
+
 pub fn build_tree(root: &Path, rel: &str) -> Result<Vec<TreeNode>, String> {
+    let repo = git2::Repository::open(root).ok();
+    build_tree_inner(root, rel, repo.as_ref())
+}
+
+fn build_tree_inner(
+    root: &Path,
+    rel: &str,
+    repo: Option<&git2::Repository>,
+) -> Result<Vec<TreeNode>, String> {
     let abs = if rel.is_empty() {
         root.to_path_buf()
     } else {
@@ -62,8 +79,11 @@ pub fn build_tree(root: &Path, rel: &str) -> Result<Vec<TreeNode>, String> {
             Ok(t) => t,
             Err(_) => continue,
         };
+        if is_ignored(repo, &rel_path) {
+            continue;
+        }
         if ft.is_dir() {
-            let children = build_tree(root, &rel_path)?;
+            let children = build_tree_inner(root, &rel_path, repo)?;
             nodes.push(TreeNode {
                 name,
                 path: rel_path,
@@ -115,7 +135,8 @@ pub fn write_file(abs: &PathBuf, content: &str) -> Result<(), String> {
 pub fn search(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
     let q = query.to_lowercase();
     let mut hits: Vec<SearchHit> = Vec::new();
-    walk_search(root, "", &q, query.chars().count(), &mut hits)?;
+    let repo = git2::Repository::open(root).ok();
+    walk_search(root, "", &q, query.chars().count(), &mut hits, repo.as_ref())?;
     Ok(hits)
 }
 
@@ -125,6 +146,7 @@ fn walk_search(
     q: &str,
     q_chars: usize,
     hits: &mut Vec<SearchHit>,
+    repo: Option<&git2::Repository>,
 ) -> Result<(), String> {
     const MAX: usize = 200;
     if hits.len() >= MAX {
@@ -156,8 +178,11 @@ fn walk_search(
             Ok(t) => t,
             Err(_) => continue,
         };
+        if is_ignored(repo, &rel_path) {
+            continue;
+        }
         if ft.is_dir() {
-            walk_search(root, &rel_path, q, q_chars, hits)?;
+            walk_search(root, &rel_path, q, q_chars, hits, repo)?;
         } else if ft.is_file() {
             if name.to_lowercase().contains(q) {
                 hits.push(SearchHit {

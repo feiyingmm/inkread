@@ -4,10 +4,28 @@
       <aside class="side" :class="{ 'is-closed': !sideOpen }">
         <div class="side-head">
           <div class="side-logo">墨</div>
-          <div style="min-width: 0">
+          <button class="repo-switch" title="切换 / 添加文库" @click="repoMenuOpen = !repoMenuOpen">
             <div class="side-title">墨阅</div>
-            <div class="side-repo">{{ repo.currentRepoId || '未选择仓库' }}</div>
-          </div>
+            <div class="side-repo">{{ repo.currentRepoId || '添加文库…' }} <span class="repo-caret">▾</span></div>
+          </button>
+          <template v-if="repoMenuOpen">
+            <div class="repo-menu-mask" @click="repoMenuOpen = false"></div>
+            <div class="repo-menu">
+              <div class="repo-menu-label">文库</div>
+              <button
+                v-for="r in repo.repos"
+                :key="r.id"
+                class="repo-item"
+                :class="{ 'is-on': r.id === repo.currentRepoId }"
+                @click="switchRepo(r.id)"
+              >
+                {{ r.name }}<span v-if="r.id === repo.currentRepoId" class="repo-check">✓</span>
+              </button>
+              <div class="repo-menu-sep"></div>
+              <button v-if="!isAndroid" class="repo-item" @click="onAddLocal">＋ 添加本地仓库…</button>
+              <button class="repo-item" @click="onAddClone">⇩ 克隆远程仓库…</button>
+            </div>
+          </template>
         </div>
         <div class="side-body">
           <div v-if="repo.error" class="tree-empty">{{ repo.error }}</div>
@@ -82,7 +100,7 @@
       @open="onPaletteOpen"
     />
     <ConflictDialog v-if="conflictOpen" @resolve="doResolve" @cancel="conflictOpen = false" />
-    <CloneDialog v-if="cloneOpen" @close="cloneOpen = false" @done="repo.init()" />
+    <CloneDialog v-if="cloneOpen" @close="cloneOpen = false" @done="onCloneDone" />
   </div>
 </template>
 
@@ -180,11 +198,49 @@ async function pickLocalRepo(): Promise<void> {
     const { open } = await import('@tauri-apps/plugin-dialog')
     const dir = await open({ directory: true, title: '选择本地 git 仓库目录' })
     if (typeof dir !== 'string' || !dir) return
-    await backend.addRepoLocal(dir)
+    const added = await backend.addRepoLocal(dir)
     await repo.init()
+    await switchRepo(added.id)
   } catch (e) {
     toast((e as Error).message, true)
   }
+}
+
+const repoMenuOpen = ref(false)
+
+async function switchRepo(id: string): Promise<void> {
+  repoMenuOpen.value = false
+  if (id === repo.currentRepoId) return
+  if (editMode.value) {
+    if (editorRef.value?.isDirty() && !window.confirm('有未保存的修改,放弃并切换文库?')) return
+    editMode.value = false
+  }
+  await repo.setCurrent(id)
+  await router.replace({ query: {} })
+  if (repo.exists('INDEX.md')) openFile('INDEX.md')
+}
+
+function onAddLocal(): void {
+  repoMenuOpen.value = false
+  if (!isTauri) {
+    toast('开发模式请编辑 dev-server/repos.local.json 后刷新', true)
+    return
+  }
+  void pickLocalRepo()
+}
+
+function onAddClone(): void {
+  repoMenuOpen.value = false
+  if (!isTauri) {
+    toast('开发模式请编辑 dev-server/repos.local.json 后刷新', true)
+    return
+  }
+  cloneOpen.value = true
+}
+
+async function onCloneDone(repoId: string): Promise<void> {
+  await repo.init()
+  await switchRepo(repoId)
 }
 
 async function doResolve(strategy: 'local' | 'remote'): Promise<void> {

@@ -63,4 +63,6 @@ export interface Backend {
   addRepoLocal(path: string): Promise<RepoMeta>
   /** 克隆远程仓库(HTTPS;私有仓库带 token,token 按 host 保存供后续 pull/push 复用) */
   addRepoClone(url: string, token?: string): Promise<RepoMeta>
+  /** 保存/更新某 host 的访问令牌(空 token 表示删除) */
+  saveToken(host: string, token: string): Promise<void>
 }

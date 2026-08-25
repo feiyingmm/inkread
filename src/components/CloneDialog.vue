@@ -25,7 +25,7 @@ import { ref } from 'vue'
 import { backend } from '@/core/backend'
 import { toast } from '@/core/toast'
 
-const emit = defineEmits<{ close: []; done: [] }>()
+const emit = defineEmits<{ close: []; done: [repoId: string] }>()
 
 const url = ref('')
 const token = ref('')
@@ -34,9 +34,9 @@ const cloning = ref(false)
 async function doClone(): Promise<void> {
   cloning.value = true
   try {
-    await backend.addRepoClone(url.value.trim(), token.value.trim() || undefined)
+    const meta = await backend.addRepoClone(url.value.trim(), token.value.trim() || undefined)
     toast('克隆完成')
-    emit('done')
+    emit('done', meta.id)
     emit('close')
   } catch (e) {
     toast((e as Error).message, true)

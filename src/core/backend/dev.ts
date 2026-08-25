@@ -40,4 +40,6 @@ export const devBackend: Backend = {
     Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 添加仓库')),
   addRepoClone: () =>
     Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 添加仓库')),
+  saveToken: () =>
+    Promise.reject(new Error('开发模式凭据走系统 git,无需配置令牌')),
 }

@@ -25,4 +25,5 @@ export const tauriBackend: Backend = {
   openExternal: (url) => openUrl(url),
   addRepoLocal: (path) => invoke<RepoMeta>('add_repo_local', { path }),
   addRepoClone: (url, token) => invoke<RepoMeta>('add_repo_clone', { url, token }),
+  saveToken: (host, token) => invoke<void>('save_token', { host, token }),
 }

@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { loadRepos, findRepo, resolveInRepo, type DevRepo } from './repos'
-import { gitPull, gitResolve, gitStatus, gitSync } from './git'
+import { gitPull, gitResolve, gitStatus, gitSync, run } from './git'
 
 const TEXT_EXT = new Set(['md', 'markdown', 'txt', 'sql', 'html', 'htm', 'json', 'yml', 'yaml', 'xml', 'csv', 'js', 'ts', 'css', 'sh', 'py', 'java', 'properties', 'conf', 'ini', 'log'])
 const MIME: Record<string, string> = {
@@ -20,7 +20,59 @@ interface TreeNode {
   children?: TreeNode[]
 }
 
+function sortNodes(nodes: TreeNode[]): void {
+  nodes.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+    return a.name.localeCompare(b.name, 'zh-CN')
+  })
+  for (const n of nodes) if (n.children) sortNodes(n.children)
+}
+
+/** git 仓库:文件树 = 受版本控制 + 未被 .gitignore 忽略的文件(与文档库语义一致) */
+async function listRepoFiles(repoPath: string): Promise<string[] | null> {
+  const r = await run(repoPath, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])
+  if (r.code !== 0) return null
+  return r.stdout.split('\0').filter((s) => s.length > 0 && !s.startsWith('.git/'))
+}
+
+function assembleTree(files: string[]): TreeNode[] {
+  const rootNodes: TreeNode[] = []
+  const dirMap = new Map<string, TreeNode>()
+
+  function ensureDir(dirPath: string): TreeNode[] {
+    if (!dirPath) return rootNodes
+    const found = dirMap.get(dirPath)
+    if (found) return found.children!
+    const i = dirPath.lastIndexOf('/')
+    const parent = ensureDir(i < 0 ? '' : dirPath.slice(0, i))
+    const node: TreeNode = {
+      name: dirPath.slice(i + 1),
+      path: dirPath,
+      type: 'dir',
+      children: [],
+    }
+    dirMap.set(dirPath, node)
+    parent.push(node)
+    return node.children!
+  }
+
+  for (const f of files) {
+    // 任一路径段以 . 开头(.github/.claude/.obsidian 等)不进文档树
+    if (f.split('/').some((seg) => seg.startsWith('.'))) continue
+    const name = f.slice(f.lastIndexOf('/') + 1)
+    const i = f.lastIndexOf('/')
+    const siblings = ensureDir(i < 0 ? '' : f.slice(0, i))
+    siblings.push({ name, path: f, type: 'file', ext: path.extname(name).slice(1).toLowerCase() })
+  }
+  sortNodes(rootNodes)
+  return rootNodes
+}
+
 async function buildTree(root: string, rel = ''): Promise<TreeNode[]> {
+  if (!rel) {
+    const files = await listRepoFiles(root)
+    if (files) return assembleTree(files)
+  }
   const abs = rel ? path.join(root, rel) : root
   const entries = await fsp.readdir(abs, { withFileTypes: true })
   const nodes: TreeNode[] = []
@@ -36,10 +88,7 @@ async function buildTree(root: string, rel = ''): Promise<TreeNode[]> {
       nodes.push({ name: e.name, path: relPath, type: 'file', ext })
     }
   }
-  nodes.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
-    return a.name.localeCompare(b.name, 'zh-CN')
-  })
+  sortNodes(nodes)
   return nodes
 }
 
@@ -47,6 +96,42 @@ async function searchRepo(repo: DevRepo, query: string) {
   const q = query.toLowerCase()
   const hits: { path: string; line: number; preview: string; nameMatch: boolean }[] = []
   const MAX = 200
+
+  const gitFiles = await listRepoFiles(repo.path)
+  if (gitFiles) {
+    for (const relPath of gitFiles) {
+      if (hits.length >= MAX) break
+      const name = relPath.slice(relPath.lastIndexOf('/') + 1)
+      if (name.toLowerCase().includes(q)) {
+        hits.push({ path: relPath, line: 0, preview: name, nameMatch: true })
+      }
+      const ext = path.extname(name).slice(1).toLowerCase()
+      if (!TEXT_EXT.has(ext)) continue
+      const abs = path.join(repo.path, relPath)
+      let stat
+      try {
+        stat = await fsp.stat(abs)
+      } catch {
+        continue
+      }
+      if (stat.size > 4 * 1024 * 1024) continue
+      const content = await fsp.readFile(abs, 'utf-8')
+      if (!content.toLowerCase().includes(q)) continue
+      const lines = content.split('\n')
+      for (let i = 0; i < lines.length && hits.length < MAX; i++) {
+        const idx = lines[i].toLowerCase().indexOf(q)
+        if (idx < 0) continue
+        const start = Math.max(0, idx - 40)
+        hits.push({
+          path: relPath,
+          line: i + 1,
+          preview: lines[i].slice(start, idx + query.length + 60).trim(),
+          nameMatch: false,
+        })
+      }
+    }
+    return hits
+  }
 
   async function walk(rel: string) {
     if (hits.length >= MAX) return

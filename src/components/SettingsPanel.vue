@@ -60,13 +60,60 @@
           </button>
         </div>
       </div>
+
+      <div class="set-group">
+        <div class="set-label">Git 访问令牌(私有仓库拉取/推送)</div>
+        <template v-if="isTauri">
+          <div class="set-row" style="flex-direction: column; align-items: stretch; gap: 8px">
+            <input v-model="tokenHost" class="palette-input" placeholder="gitee.com" />
+            <input v-model="tokenValue" class="palette-input" type="password" placeholder="Personal Access Token" />
+            <div style="display: flex; gap: 8px">
+              <button class="opt is-on" :disabled="!tokenHost.trim()" @click="saveTok">保存令牌</button>
+              <button class="opt" :disabled="!tokenHost.trim()" @click="clearTok">删除该域令牌</button>
+            </div>
+          </div>
+          <div class="set-hint">桌面端优先使用系统 git 已保存的凭据;此处令牌供克隆的仓库与手机端使用,按域名保存。</div>
+        </template>
+        <div v-else class="set-hint">
+          开发模式凭据走系统 git;仓库注册在 dev-server/repos.local.json。
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useSettings } from '@/stores/settings'
+import { backend, isTauri } from '@/core/backend'
+import { toast } from '@/core/toast'
 
 const emit = defineEmits<{ close: [] }>()
 const settings = useSettings()
+
+const tokenHost = ref('gitee.com')
+const tokenValue = ref('')
+
+async function saveTok(): Promise<void> {
+  if (!tokenValue.value.trim()) {
+    toast('令牌为空,如需删除请点「删除该域令牌」', true)
+    return
+  }
+  try {
+    await backend.saveToken(tokenHost.value.trim(), tokenValue.value.trim())
+    tokenValue.value = ''
+    toast('令牌已保存')
+  } catch (e) {
+    toast((e as Error).message, true)
+  }
+}
+
+async function clearTok(): Promise<void> {
+  try {
+    await backend.saveToken(tokenHost.value.trim(), '')
+    toast('已删除该域令牌')
+  } catch (e) {
+    toast((e as Error).message, true)
+  }
+}
 </script>

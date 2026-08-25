@@ -16,8 +16,11 @@ export const useRepoStore = defineStore('repo', () => {
     error.value = ''
     try {
       repos.value = await backend.listRepos()
-      if (!currentRepoId.value && repos.value.length > 0) {
-        currentRepoId.value = repos.value[0].id
+      const saved = localStorage.getItem('inkread:repo')
+      if (saved && repos.value.some((r) => r.id === saved)) {
+        currentRepoId.value = saved
+      } else if (!repos.value.some((r) => r.id === currentRepoId.value)) {
+        currentRepoId.value = repos.value[0]?.id ?? ''
       }
       if (currentRepoId.value) await refresh()
     } catch (e) {
@@ -25,6 +28,16 @@ export const useRepoStore = defineStore('repo', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  /** 切换当前仓库并刷新文件树 */
+  async function setCurrent(id: string) {
+    if (id === currentRepoId.value) return
+    currentRepoId.value = id
+    localStorage.setItem('inkread:repo', id)
+    tree.value = []
+    status.value = null
+    await refresh()
   }
 
   async function refresh() {
@@ -67,5 +80,5 @@ export const useRepoStore = defineStore('repo', () => {
     return walk(tree.value)
   }
 
-  return { repos, currentRepoId, tree, status, loading, pulling, error, init, refresh, refreshStatus, pull, exists }
+  return { repos, currentRepoId, tree, status, loading, pulling, error, init, setCurrent, refresh, refreshStatus, pull, exists }
 })
