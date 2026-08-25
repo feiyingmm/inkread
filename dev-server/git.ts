@@ -21,11 +21,24 @@ export function run(repoPath: string, args: string[]): Promise<{ code: number; s
 export async function gitStatus(repoPath: string) {
   const branch = (await run(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim() || '(无分支)'
   const porcelain = await run(repoPath, ['status', '--porcelain', '-z'])
-  const entries = porcelain.stdout.split('\0').filter((s) => s.trim().length > 0)
-  const dirtyFiles = entries.slice(0, 8).map((s) => {
-    const p = s.slice(3)
-    return p.slice(p.lastIndexOf('/') + 1)
-  })
+  const parts = porcelain.stdout.split('\0')
+  const changes: { path: string; kind: string }[] = []
+  let total = 0
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i]
+    if (!entry || entry.length < 4) continue
+    total++
+    const xy = entry.slice(0, 2)
+    const p = entry.slice(3)
+    let kind = 'modified'
+    if (xy === '??') kind = 'untracked'
+    else if (xy.includes('D')) kind = 'deleted'
+    else if (xy.includes('R') || xy.includes('C')) {
+      kind = 'renamed'
+      i++ // -z 模式下重命名的旧路径占下一段,跳过
+    } else if (xy.includes('A')) kind = 'added'
+    if (changes.length < 500) changes.push({ path: p, kind })
+  }
   let ahead = 0
   let behind = 0
   const lr = await run(repoPath, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'])
@@ -34,7 +47,7 @@ export async function gitStatus(repoPath: string) {
     ahead = Number(m[0] ?? 0)
     behind = Number(m[1] ?? 0)
   }
-  return { branch, dirtyCount: entries.length, dirtyFiles, ahead, behind }
+  return { branch, dirtyCount: total, changes, ahead, behind }
 }
 
 export async function gitPull(repoPath: string) {

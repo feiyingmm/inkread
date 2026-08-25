@@ -8,10 +8,17 @@ use std::path::Path;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitChange {
+    pub path: String,
+    pub kind: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStatusOut {
     pub branch: String,
     pub dirty_count: u32,
-    pub dirty_files: Vec<String>,
+    pub changes: Vec<GitChange>,
     pub ahead: u32,
     pub behind: u32,
 }
@@ -74,14 +81,28 @@ pub fn status(path: &Path) -> Result<GitStatusOut, String> {
     let statuses = repo
         .statuses(Some(&mut opts))
         .map_err(|e| e.message().to_string())?;
-    let mut dirty_files: Vec<String> = Vec::new();
+    let mut changes: Vec<GitChange> = Vec::new();
     for entry in statuses.iter() {
-        if dirty_files.len() >= 8 {
+        if changes.len() >= 500 {
             break;
         }
+        let s = entry.status();
+        let kind = if s.contains(git2::Status::WT_NEW) {
+            "untracked"
+        } else if s.contains(git2::Status::WT_DELETED) || s.contains(git2::Status::INDEX_DELETED) {
+            "deleted"
+        } else if s.contains(git2::Status::INDEX_RENAMED) || s.contains(git2::Status::WT_RENAMED) {
+            "renamed"
+        } else if s.contains(git2::Status::INDEX_NEW) {
+            "added"
+        } else {
+            "modified"
+        };
         if let Some(p) = entry.path() {
-            let name = p.rsplit('/').next().unwrap_or(p);
-            dirty_files.push(name.to_string());
+            changes.push(GitChange {
+                path: p.to_string(),
+                kind: kind.to_string(),
+            });
         }
     }
     let dirty_count = statuses.len() as u32;
@@ -90,7 +111,7 @@ pub fn status(path: &Path) -> Result<GitStatusOut, String> {
     Ok(GitStatusOut {
         branch,
         dirty_count,
-        dirty_files,
+        changes,
         ahead: ahead as u32,
         behind: behind as u32,
     })

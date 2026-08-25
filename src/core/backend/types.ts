@@ -16,10 +16,18 @@ export interface FileContent {
   mtime: number
 }
 
+export type GitChangeKind = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
+
+export interface GitChange {
+  path: string
+  kind: GitChangeKind
+}
+
 export interface GitStatus {
   branch: string
   dirtyCount: number
-  dirtyFiles: string[]
+  /** 未提交的变更明细(上限 500 条) */
+  changes: GitChange[]
   ahead: number
   behind: number
 }

@@ -109,6 +109,7 @@
           :edit-mode="editMode"
           :auto-save="settings.autoSave"
           @sync="doSync"
+          @show-changes="changesOpen = true"
         />
       </main>
 
@@ -138,6 +139,14 @@
       @discard="onDiscardLocal"
     />
     <CloneDialog v-if="cloneOpen" @close="cloneOpen = false" @done="onCloneDone" />
+    <ChangesPanel
+      v-if="changesOpen"
+      :changes="repo.status?.changes ?? []"
+      :syncing="syncing"
+      @close="changesOpen = false"
+      @open="onOpenChange"
+      @sync="doSync"
+    />
 
     <button
       v-if="isNarrow && !editMode && currentPath && toc.length > 0"
@@ -171,6 +180,7 @@ import StatusBar from '@/components/StatusBar.vue'
 import SyncIssueDialog from '@/components/SyncIssueDialog.vue'
 import CloneDialog from '@/components/CloneDialog.vue'
 import MobileTocSheet from '@/components/MobileTocSheet.vue'
+import ChangesPanel from '@/components/ChangesPanel.vue'
 import { backend, isTauri } from '@/core/backend'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
@@ -210,6 +220,16 @@ const narrowMq = window.matchMedia('(max-width: 900px)')
 const isNarrow = ref(narrowMq.matches)
 narrowMq.addEventListener('change', (e) => (isNarrow.value = e.matches))
 const tocSheetOpen = ref(false)
+const changesOpen = ref(false)
+
+function onOpenChange(path: string): void {
+  changesOpen.value = false
+  if (fileKind(path) === 'other') {
+    toast('暂不支持打开该类型文件', true)
+    return
+  }
+  openFile(path)
+}
 
 const currentPath = computed(() => String(route.query.f ?? ''))
 // 手机端纯阅读:Android 上不提供编辑入口
@@ -234,7 +254,7 @@ async function doSync(): Promise<void> {
   if (syncing.value) return
   syncing.value = true
   try {
-    const files = repo.status?.dirtyFiles ?? []
+    const files = (repo.status?.changes ?? []).map((c) => c.path.slice(c.path.lastIndexOf('/') + 1))
     const msg = files.length
       ? `docs: 更新 ${files.slice(0, 3).join('、')}${files.length > 3 ? ` 等 ${repo.status?.dirtyCount ?? files.length} 处` : ''}`
       : 'docs: 更新文档'
