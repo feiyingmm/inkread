@@ -4,9 +4,9 @@
 
     <div v-if="searchNav" class="search-nav">
       <span class="sn-count">{{ searchNav.idx + 1 }}/{{ searchNav.total }}</span>
-      <button class="sn-btn" title="上一处" @click="stepHit(-1)">↑</button>
-      <button class="sn-btn" title="下一处" @click="stepHit(1)">↓</button>
-      <button class="sn-btn" title="清除高亮" @click="clearSearch()">×</button>
+      <button class="sn-btn" title="上一处" @click="stepHit(-1)"><Icon name="chevron-up" :size="16" /></button>
+      <button class="sn-btn" title="下一处" @click="stepHit(1)"><Icon name="chevron-down" :size="16" /></button>
+      <button class="sn-btn" title="清除高亮" @click="clearSearch()"><Icon name="close" :size="15" /></button>
     </div>
 
     <div class="prose-wrap">
@@ -20,7 +20,7 @@
       ></div>
     </div>
 
-    <button v-show="showBackTop" class="back-top" title="回到顶部" @click="toTop()">↑</button>
+    <button v-show="showBackTop" class="back-top" title="回到顶部" @click="toTop()"><Icon name="up" :size="19" /></button>
 
     <div v-if="lightboxSrc || lightboxSvg" class="lightbox" @click="closeLightbox">
       <img v-if="lightboxSrc" :src="lightboxSrc" alt="" />
@@ -38,6 +38,7 @@ import { transformInfoCards } from '@/core/markdown/infocard'
 import { renderMermaidBlocks } from '@/core/markdown/mermaid'
 import { useSettings } from '@/stores/settings'
 import { toast } from '@/core/toast'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   repoId: string

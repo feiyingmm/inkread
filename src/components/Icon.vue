@@ -5,7 +5,7 @@
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    stroke-width="1.8"
+    stroke-width="1.7"
     stroke-linecap="round"
     stroke-linejoin="round"
     :class="{ 'icon-spin': spin }"
@@ -70,6 +70,19 @@ const ICONS: Record<string, IconDef> = {
   width: { paths: ['M3 12h18', 'M8 7l-5 5 5 5', 'M16 7l5 5-5 5'] },
   folder: { paths: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'] },
   up: { paths: ['M12 19V5', 'M5 12l7-7 7 7'] },
+  close: { paths: ['M18 6L6 18', 'M6 6l12 12'] },
+  plus: { paths: ['M12 5v14', 'M5 12h14'] },
+  download: { paths: ['M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2', 'M7 11l5 5 5-5', 'M12 16V4'] },
+  doc: { paths: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 3v5h5'] },
+  'chevron-up': { paths: ['M6 15l6-6 6 6'] },
+  'chevron-down': { paths: ['M6 9l6 6 6-6'] },
+  'chevron-right': { paths: ['M9 6l6 6-6 6'] },
+  'arrow-down-sm': { paths: ['M12 5v14', 'M6 13l6 6 6-6'] },
+  'arrow-up-sm': { paths: ['M12 19V5', 'M6 11l6-6 6 6'] },
+  branch: {
+    paths: ['M6 9v6', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M18 9a9 9 0 0 1-9 9'] ,
+  },
+  check: { paths: ['M20 6L9 17l-5-5'] },
 }
 
 const def = computed<IconDef>(() => ICONS[props.name] ?? { paths: [] })

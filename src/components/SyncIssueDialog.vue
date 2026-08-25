@@ -79,4 +79,10 @@ const emit = defineEmits<{
   color: var(--t3) !important;
   margin-bottom: 0 !important;
 }
+@media (max-width: 900px) {
+  .conflict {
+    margin-top: 16px;
+    width: calc(100vw - 24px);
+  }
+}
 </style>

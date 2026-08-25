@@ -158,4 +158,14 @@ const KIND_LABEL: Record<GitChangeKind, string> = {
   font-size: 12px;
   color: var(--t3);
 }
+@media (max-width: 900px) {
+  .changes-card {
+    margin-top: 16px;
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - var(--safe-top) - 90px);
+  }
+  .change-row {
+    padding: 10px;
+  }
+}
 </style>

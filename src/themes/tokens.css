@@ -9,6 +9,13 @@
   --radius-sm: 6px;
   --prose-size: 16px;
   --shadow-card: 0 10px 40px rgba(10, 25, 41, 0.28);
+  --safe-top: 0px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Android 状态栏叠在 WebView 上:全部固定弹层与外壳共用这一让位高度 */
+:root[data-android='1'] {
+  --safe-top: max(env(safe-area-inset-top, 0px), 30px);
 }
 
 /* ---------- 品牌:墨青黛蓝(默认) ---------- */

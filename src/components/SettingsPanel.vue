@@ -1,6 +1,7 @@
 <template>
   <div class="mask" @click.self="emit('close')">
     <div class="settings">
+      <div class="settings-grip"></div>
       <h3>设置</h3>
 
       <div class="set-group">

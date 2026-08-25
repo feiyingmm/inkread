@@ -62,4 +62,10 @@ async function doClone(): Promise<void> {
   font-size: 16px;
   color: var(--t1);
 }
+@media (max-width: 900px) {
+  .clone-card {
+    margin-top: 16px;
+    width: calc(100vw - 24px);
+  }
+}
 </style>

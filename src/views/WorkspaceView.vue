@@ -7,9 +7,12 @@
           <div class="side-logo">墨</div>
           <button class="repo-switch" title="切换 / 添加文库" @click="repoMenuOpen = !repoMenuOpen">
             <div class="side-title">墨阅</div>
-            <div class="side-repo">{{ repo.currentRepoId || '添加文库…' }} <span class="repo-caret">▾</span></div>
+            <div class="side-repo">
+              {{ repo.currentRepoId || '添加文库…' }}
+              <span class="repo-caret"><Icon name="chevron-down" :size="11" /></span>
+            </div>
           </button>
-          <button class="side-close" title="收起文库" @click="sideOpen = false">×</button>
+          <button class="side-close" title="收起文库" @click="sideOpen = false"><Icon name="close" :size="20" /></button>
           <template v-if="repoMenuOpen">
             <div class="repo-menu-mask" @click="repoMenuOpen = false"></div>
             <div class="repo-menu">
@@ -21,11 +24,16 @@
                 :class="{ 'is-on': r.id === repo.currentRepoId }"
                 @click="switchRepo(r.id)"
               >
-                {{ r.name }}<span v-if="r.id === repo.currentRepoId" class="repo-check">✓</span>
+                {{ r.name }}
+                <span v-if="r.id === repo.currentRepoId" class="repo-check"><Icon name="check" :size="14" /></span>
               </button>
               <div class="repo-menu-sep"></div>
-              <button class="repo-item" @click="onAddLocal">＋ 添加本地仓库…</button>
-              <button class="repo-item" @click="onAddClone">⇩ 克隆远程仓库…</button>
+              <button class="repo-item" @click="onAddLocal">
+                <span class="ri-icon"><Icon name="folder" :size="15" /></span>添加本地仓库…
+              </button>
+              <button class="repo-item" @click="onAddClone">
+                <span class="ri-icon"><Icon name="download" :size="15" /></span>克隆远程仓库…
+              </button>
             </div>
           </template>
         </div>
@@ -87,17 +95,9 @@
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
           <div class="sub">让每一篇 Markdown 静静展开,如书页般被阅读</div>
-          <div v-if="repo.repos.length === 0 && isTauri" class="sub" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center">
-            <button
-              class="opt"
-              style="height: 38px; font-size: 13.5px"
-              @click="isAndroid ? (localPathOpen = true) : pickLocalRepo()"
-            >
-              添加本地 git 仓库…
-            </button>
-            <button class="opt is-on" style="height: 38px; font-size: 13.5px" @click="cloneOpen = true">
-              克隆远程仓库…
-            </button>
+          <div v-if="repo.repos.length === 0 && isTauri" class="welcome-actions">
+            <button class="opt" @click="isAndroid ? (localPathOpen = true) : pickLocalRepo()">添加本地 git 仓库…</button>
+            <button class="opt is-on" @click="cloneOpen = true">克隆远程仓库…</button>
           </div>
           <div v-else class="sub" style="opacity: 0.7">从左侧文库选择一篇文档开始</div>
         </div>
@@ -172,6 +172,7 @@
     <button
       v-if="isNarrow && !editMode && currentPath && toc.length > 0"
       class="fab-toc"
+      :class="{ 'chrome-hidden': chromeHidden }"
       title="目录"
       @click="tocSheetOpen = true"
     >
@@ -465,7 +466,7 @@ function onAddLocal(): void {
     toast('开发模式请编辑 dev-server/repos.local.json 后刷新', true)
     return
   }
-  // Android 的系统目录选择器返回 content:// URI,git 无法使用 → 改为手动输入路径
+  // Android 无系统目录选择器(tauri dialog 不支持),用应用内目录浏览器
   if (isAndroid) {
     localPathOpen.value = true
     return

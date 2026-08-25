@@ -270,6 +270,146 @@ fn check_storage_access() -> bool {
     }
 }
 
+/// Android:拉起「所有文件访问」系统授权页(API<30 无此页时回退应用详情页)
+#[tauri::command]
+fn request_storage_access(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        window
+            .with_webview(|webview| {
+                webview.jni_handle().exec(|env, activity, _webview| {
+                    let _ = android_jni::open_all_files_permission(env, activity);
+                });
+            })
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = window;
+        Ok(())
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DirItem {
+    name: String,
+    has_git: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DirListing {
+    path: String,
+    parent: Option<String>,
+    dirs: Vec<DirItem>,
+    is_git: bool,
+}
+
+/// 应用内目录浏览器:列出子目录(Android 没有可用的系统目录选择器)
+#[tauri::command]
+fn list_dirs(path: String) -> Result<DirListing, String> {
+    let p = PathBuf::from(&path);
+    if !p.is_dir() {
+        return Err(format!("目录不存在或不可读: {path}"));
+    }
+    let mut dirs: Vec<DirItem> = std::fs::read_dir(&p)
+        .map_err(|e| format!("无法读取目录: {e}"))?
+        .filter_map(|ent| ent.ok())
+        .filter(|ent| ent.path().is_dir())
+        .filter_map(|ent| {
+            let name = ent.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                return None;
+            }
+            let has_git = ent.path().join(".git").exists();
+            Some(DirItem { name, has_git })
+        })
+        .collect();
+    // git 仓库排前,其余按名称
+    dirs.sort_by(|a, b| {
+        b.has_git
+            .cmp(&a.has_git)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(DirListing {
+        path: p.to_string_lossy().to_string(),
+        parent: p.parent().map(|x| x.to_string_lossy().to_string()).filter(|s| !s.is_empty()),
+        dirs,
+        is_git: p.join(".git").exists(),
+    })
+}
+
+/// Android 专用 JNI 桥(经 wry 的 UI 线程执行)
+#[cfg(target_os = "android")]
+mod android_jni {
+    use jni::objects::{JObject, JString, JValue};
+    use jni::JNIEnv;
+
+    /// 关闭 WebView 内建缩放与 overview 适配:捏合缩放会把整页缩小造成右侧留白,
+    /// 字号调节由前端手势实现,页面级缩放一律禁用
+    pub fn disable_webview_zoom(env: &mut JNIEnv, webview: &JObject) -> Result<(), jni::errors::Error> {
+        let settings = env
+            .call_method(webview, "getSettings", "()Landroid/webkit/WebSettings;", &[])?
+            .l()?;
+        for (name, v) in [
+            ("setSupportZoom", false),
+            ("setBuiltInZoomControls", false),
+            ("setDisplayZoomControls", false),
+            ("setLoadWithOverviewMode", false),
+            ("setUseWideViewPort", false),
+        ] {
+            env.call_method(&settings, name, "(Z)V", &[JValue::Bool(v as u8)])?;
+        }
+        Ok(())
+    }
+
+    /// 打开「所有文件访问」系统授权页;该 action 不存在(API<30)时回退应用详情页
+    pub fn open_all_files_permission(env: &mut JNIEnv, activity: &JObject) -> Result<(), jni::errors::Error> {
+        let pkg_obj = env
+            .call_method(activity, "getPackageName", "()Ljava/lang/String;", &[])?
+            .l()?;
+        let pkg_jstr = JString::from(pkg_obj);
+        let pkg: String = env.get_string(&pkg_jstr)?.into();
+        let uri_str = env.new_string(format!("package:{pkg}"))?;
+        let uri_arg: &JObject = &uri_str;
+        let uri = env
+            .call_static_method(
+                "android/net/Uri",
+                "parse",
+                "(Ljava/lang/String;)Landroid/net/Uri;",
+                &[JValue::Object(uri_arg)],
+            )?
+            .l()?;
+        for action in [
+            "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION",
+            "android.settings.APPLICATION_DETAILS_SETTINGS",
+        ] {
+            let action_str = env.new_string(action)?;
+            let action_arg: &JObject = &action_str;
+            let intent = env.new_object(
+                "android/content/Intent",
+                "(Ljava/lang/String;Landroid/net/Uri;)V",
+                &[JValue::Object(action_arg), JValue::Object(&uri)],
+            )?;
+            let r = env.call_method(
+                activity,
+                "startActivity",
+                "(Landroid/content/Intent;)V",
+                &[JValue::Object(&intent)],
+            );
+            if env.exception_check()? {
+                env.exception_clear()?;
+                continue;
+            }
+            if r.is_ok() {
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+}
+
 #[tauri::command]
 fn save_token(app: AppHandle, host: String, token: String) -> Result<(), String> {
     let mut map = state::load_tokens(&app);
@@ -366,6 +506,8 @@ pub fn run() {
             get_token,
             export_file,
             check_storage_access,
+            request_storage_access,
+            list_dirs,
             open_path,
             take_launch_file
         ])
@@ -374,6 +516,15 @@ pub fn run() {
             let state = app.state::<AppState>();
             *state.repos.lock().unwrap() = loaded;
             *state.launch_file.lock().unwrap() = pick_md_from_args(std::env::args());
+            // Android:WebView 默认允许捏合缩放整页(与前端字号手势冲突,还会造成页面缩小右侧留白)
+            #[cfg(target_os = "android")]
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.with_webview(|webview| {
+                    webview.jni_handle().exec(|env, _activity, webview| {
+                        let _ = android_jni::disable_webview_zoom(env, webview);
+                    });
+                });
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

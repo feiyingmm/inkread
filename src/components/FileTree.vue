@@ -7,8 +7,11 @@
           :class="{ 'is-dir': n.type === 'dir', 'is-active': n.path === current }"
           @click="onClick(n)"
         >
-          <span v-if="n.type === 'dir'" class="tw" :class="{ 'is-open': open[n.path] }">▶</span>
-          <span v-else class="tw">·</span>
+          <span v-if="n.type === 'dir'" class="tw" :class="{ 'is-open': open[n.path] }">
+            <Icon name="chevron-right" :size="12" />
+          </span>
+          <span v-else class="tw"></span>
+          <span class="ti"><Icon :name="n.type === 'dir' ? 'folder' : 'doc'" :size="16" /></span>
           <span class="tname">{{ label(n) }}</span>
         </div>
         <div v-if="n.type === 'dir' && open[n.path]" class="tree-children">
@@ -28,6 +31,7 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import type { TreeNode } from '@/core/backend'
+import Icon from '@/components/Icon.vue'
 
 const props = withDefaults(
   defineProps<{

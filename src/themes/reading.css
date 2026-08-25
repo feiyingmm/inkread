@@ -174,12 +174,20 @@
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  /* 惯性滚动手感 */
+  -webkit-overflow-scrolling: touch;
 }
 .prose table {
   border-collapse: collapse;
-  width: 100%;
+  /* 列按内容自然铺开,窄屏时超出容器横向滚动,而不是把每格文字挤成一字一行 */
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
   font-size: 0.92em;
   line-height: 1.6;
+}
+.prose td {
+  max-width: 24em;
 }
 .prose th {
   background: var(--table-head);
