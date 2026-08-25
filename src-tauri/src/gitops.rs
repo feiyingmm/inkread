@@ -223,7 +223,7 @@ pub fn pull(path: &Path, tokens: HashMap<String, String>) -> Result<GitOpResult,
 pub fn pull_force(path: &Path, tokens: HashMap<String, String>) -> Result<GitOpResult, String> {
     let repo = open(path)?;
     let Some(remote_name) = pick_remote(&repo) else {
-        return Ok(GitOpResult::simple(false, false, "该文库没有远程仓库".into()));
+        return Ok(GitOpResult::simple(false, false, "该文库没有远程仓库"));
     };
     let branch = current_branch(&repo)?;
     fetch_remote(&repo, &remote_name, &branch, tokens)?;
