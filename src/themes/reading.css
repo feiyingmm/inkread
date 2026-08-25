@@ -1,0 +1,360 @@
+/* ============ 阅读排版:书卷气正文 ============ */
+
+.prose-wrap {
+  padding: 34px 44px 90px;
+}
+
+.prose {
+  max-width: 46em;
+  margin: 0 auto;
+  font-size: var(--prose-size);
+  line-height: 1.78;
+  color: var(--t1);
+  word-break: break-word;
+  transition: max-width 0.25s ease;
+}
+.prose.is-wide {
+  max-width: none;
+}
+.prose.is-serif {
+  font-family: var(--font-serif);
+}
+
+/* ---------- 标题(衬线) ---------- */
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  color: var(--t1);
+  line-height: 1.4;
+  margin: 1.9em 0 0.7em;
+  scroll-margin-top: 16px;
+}
+.prose h1 {
+  font-size: 1.72em;
+  margin-top: 0.4em;
+  padding-bottom: 0.45em;
+  border-bottom: 1px solid var(--line);
+}
+.prose h2 {
+  font-size: 1.38em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--line);
+}
+.prose h3 {
+  font-size: 1.18em;
+}
+.prose h4 {
+  font-size: 1.05em;
+}
+.prose h5,
+.prose h6 {
+  font-size: 1em;
+}
+
+.prose p {
+  margin: 0.85em 0;
+}
+
+.prose a {
+  color: var(--link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.12s ease;
+}
+.prose a:hover {
+  border-bottom-color: var(--link);
+}
+
+.prose strong {
+  color: var(--t1);
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.6em;
+  margin: 0.7em 0;
+}
+.prose li {
+  margin: 0.28em 0;
+}
+.prose li::marker {
+  color: var(--accent);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 2.2em 0;
+}
+
+.prose img {
+  max-width: 100%;
+  border-radius: var(--radius);
+  cursor: zoom-in;
+  box-shadow: 0 2px 14px rgba(15, 30, 45, 0.1);
+}
+
+/* ---------- 行内代码 ---------- */
+.prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  border-radius: 5px;
+  padding: 0.15em 0.42em;
+  margin: 0 0.1em;
+}
+
+/* ---------- 引用块 ---------- */
+.prose blockquote {
+  margin: 1em 0;
+  padding: 0.55em 1.1em;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--t2);
+}
+.prose blockquote p {
+  margin: 0.35em 0;
+}
+
+/* ---------- 元信息卡 ---------- */
+.meta-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px 22px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin: 1.1em 0 1.5em;
+  font-size: 0.88em;
+}
+.meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.meta-key {
+  color: var(--t3);
+  flex-shrink: 0;
+}
+.meta-key::after {
+  content: '';
+}
+.meta-val {
+  color: var(--accent-deep);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta-val a {
+  color: var(--link);
+}
+.meta-badge {
+  background: var(--bg-card);
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  padding: 0.05em 0.7em;
+  font-size: 0.92em;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* ---------- 表格 ---------- */
+.table-wrap {
+  margin: 1.1em 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+.prose th {
+  background: var(--table-head);
+  color: var(--t1);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.prose th,
+.prose td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.prose tr:last-child td {
+  border-bottom: none;
+}
+.prose tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+/* ---------- 代码块 ---------- */
+.code-block {
+  margin: 1.1em 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-side);
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--table-head);
+}
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--t3);
+  text-transform: lowercase;
+}
+.code-copy {
+  border: none;
+  background: transparent;
+  color: var(--t3);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.code-copy:hover {
+  background: var(--bg-hover);
+  color: var(--t1);
+}
+.code-pre {
+  margin: 0;
+  padding: 13px 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  line-height: 1.68;
+  color: var(--t1);
+}
+.code-pre code {
+  font-family: inherit;
+  background: none;
+}
+.code-block--file {
+  margin: 0;
+}
+
+/* highlight.js → CSS 变量(深浅色自动) */
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-tag {
+  color: var(--hl-kw);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--hl-string);
+}
+.hljs-number,
+.hljs-literal,
+.hljs-deletion {
+  color: var(--hl-number);
+}
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-function {
+  color: var(--hl-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: var(--hl-attr);
+}
+.hljs-meta,
+.hljs-doctag {
+  color: var(--hl-meta);
+}
+.hljs-built_in,
+.hljs-type,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--hl-builtin);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* ---------- Mermaid ---------- */
+.mermaid-block {
+  margin: 1.2em 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-side);
+  text-align: center;
+}
+.mermaid-block .mermaid-src {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  color: var(--t3);
+  text-align: left;
+  white-space: pre-wrap;
+  margin: 0;
+}
+.mermaid-block.is-rendered .mermaid-src {
+  display: none;
+}
+.mermaid-target svg {
+  max-width: 100%;
+  height: auto;
+}
+.mermaid-error {
+  color: #b04a4a;
+  font-size: 0.85em;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+/* ---------- KaTeX ---------- */
+.prose .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+/* ---------- 搜索高亮 ---------- */
+.prose mark,
+.prose .search-hit {
+  background: #f6d76b;
+  color: #4a3a08;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+:root[data-mode='dark'] .prose mark,
+:root[data-mode='dark'] .prose .search-hit {
+  background: #8a6d1f;
+  color: #f5e9c8;
+}

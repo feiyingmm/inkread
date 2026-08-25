@@ -1,0 +1,53 @@
+<template>
+  <div>
+    <template v-for="n in nodes" :key="n.path">
+      <div class="tree-item">
+        <div
+          class="tree-row"
+          :class="{ 'is-dir': n.type === 'dir', 'is-active': n.path === current }"
+          @click="onClick(n)"
+        >
+          <span v-if="n.type === 'dir'" class="tw" :class="{ 'is-open': open[n.path] }">▶</span>
+          <span v-else class="tw">·</span>
+          <span class="tname">{{ label(n) }}</span>
+        </div>
+        <div v-if="n.type === 'dir' && open[n.path]" class="tree-children">
+          <FileTree :nodes="n.children ?? []" :current="current" :depth="depth + 1" @open="emit('open', $event)" />
+        </div>
+      </div>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { reactive } from 'vue'
+import type { TreeNode } from '@/core/backend'
+
+withDefaults(
+  defineProps<{
+    nodes: TreeNode[]
+    current: string
+    depth?: number
+  }>(),
+  { depth: 0 },
+)
+
+const emit = defineEmits<{ open: [node: TreeNode] }>()
+
+const open = reactive<Record<string, boolean>>({})
+
+function label(n: TreeNode): string {
+  if (n.type === 'file' && (n.ext === 'md' || n.ext === 'markdown')) {
+    return n.name.replace(/\.(md|markdown)$/i, '')
+  }
+  return n.name
+}
+
+function onClick(n: TreeNode): void {
+  if (n.type === 'dir') {
+    open[n.path] = !open[n.path]
+  } else {
+    emit('open', n)
+  }
+}
+</script>

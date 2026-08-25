@@ -1,0 +1,121 @@
+/* ============ 墨阅主题令牌:data-brand(ink|violet) × data-mode(light|dark) ============ */
+
+:root {
+  --font-serif: 'LXGW WenKai Screen', 'Source Han Serif SC', 'STZhongsong', 'SimSun', serif;
+  --font-sans: system-ui, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, 'Sarasa Mono SC', 'Courier New', monospace;
+  --radius-lg: 18px;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --prose-size: 16px;
+  --shadow-card: 0 10px 40px rgba(10, 25, 41, 0.28);
+}
+
+/* ---------- 品牌:墨青黛蓝(默认) ---------- */
+:root[data-brand='ink'] {
+  --g1: #122c47;
+  --g2: #28536e;
+  --g3: #4a7c93;
+  --accent: #2f5d7c;
+  --accent-deep: #1d4a68;
+  --accent-soft: #eef4f7;
+  --accent-line: #d9e6ec;
+  --code-fg: #c25232;
+  --code-bg: #fbeee9;
+  --link: #1f6f9c;
+  --sel-bg: #2f5d7c;
+  --sel-fg: #ffffff;
+}
+
+/* ---------- 品牌:紫罗兰 ---------- */
+:root[data-brand='violet'] {
+  --g1: #6d5bd0;
+  --g2: #a78bfa;
+  --g3: #c084fc;
+  --accent: #7c6ee6;
+  --accent-deep: #534ab7;
+  --accent-soft: #f4f2fc;
+  --accent-line: #e6e1f8;
+  --code-fg: #d4537e;
+  --code-bg: #fdeef3;
+  --link: #6a5bd8;
+  --sel-bg: #7c6ee6;
+  --sel-fg: #ffffff;
+}
+
+/* ---------- 浅色 ---------- */
+:root[data-mode='light'] {
+  --bg-card: #ffffff;
+  --bg-side: #fafbfd;
+  --bg-hover: #f1f5f8;
+  --t1: #1e2833;
+  --t2: #4c5a66;
+  --t3: #8b97a3;
+  --line: #e8edf2;
+  --line-strong: #d9e1e8;
+  --table-head: #f5f8fa;
+  --scroll-thumb: #ccd6de;
+
+  --hl-comment: #93a1ad;
+  --hl-kw: #7c4dbd;
+  --hl-string: #2f7d5d;
+  --hl-number: #b35a1f;
+  --hl-title: #1d5f8a;
+  --hl-attr: #366b80;
+  --hl-meta: #8a6a2f;
+  --hl-builtin: #8a3d6e;
+}
+
+/* ---------- 深色 ---------- */
+:root[data-mode='dark'] {
+  --bg-card: #14191f;
+  --bg-side: #10151b;
+  --bg-hover: #1c242d;
+  --t1: #d8e0e8;
+  --t2: #9aa8b4;
+  --t3: #5e6c78;
+  --line: #232d37;
+  --line-strong: #2e3a46;
+  --table-head: #1a222b;
+  --scroll-thumb: #37434f;
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.5);
+
+  --hl-comment: #5f6f7c;
+  --hl-kw: #b795f2;
+  --hl-string: #7ec9a5;
+  --hl-number: #e0a06a;
+  --hl-title: #7fb8e0;
+  --hl-attr: #82b8cc;
+  --hl-meta: #cbb075;
+  --hl-builtin: #d391bd;
+}
+
+/* 深色 × 墨青 */
+:root[data-mode='dark'][data-brand='ink'] {
+  --g1: #080f18;
+  --g2: #0d1a27;
+  --g3: #16283a;
+  --accent: #5b93b5;
+  --accent-deep: #7fb2d0;
+  --accent-soft: #16222e;
+  --accent-line: #1f3242;
+  --code-fg: #e08a68;
+  --code-bg: #2b1f1a;
+  --link: #66aed6;
+  --sel-bg: #2f5d7c;
+}
+
+/* 深色 × 紫罗兰 */
+:root[data-mode='dark'][data-brand='violet'] {
+  --g1: #16112b;
+  --g2: #201741;
+  --g3: #2c1f56;
+  --accent: #a08df0;
+  --accent-deep: #baa8f7;
+  --accent-soft: #221c3a;
+  --accent-line: #322a52;
+  --code-fg: #e987ab;
+  --code-bg: #2e1e28;
+  --link: #a99af5;
+  --sel-bg: #6a5acd;
+}

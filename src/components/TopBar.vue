@@ -1,0 +1,66 @@
+<template>
+  <div class="topbar">
+    <button class="tbtn" title="文库 (Ctrl+B)" @click="emit('toggle-side')">☰</button>
+    <div class="crumbs">
+      <span class="seg">{{ repoName }}</span>
+      <template v-for="(seg, i) in segments" :key="i">
+        <span class="sep">/</span>
+        <span class="seg">{{ seg }}</span>
+      </template>
+    </div>
+
+    <div v-if="status" class="git-badge" :title="`分支 ${status.branch},本地变更 ${status.dirtyCount} 个`">
+      <span>{{ status.branch }}</span>
+      <span v-if="status.dirtyCount > 0" class="dot"></span>
+    </div>
+
+    <button
+      class="tbtn"
+      :class="{ 'is-on': settings.width === 'wide' }"
+      :title="settings.width === 'book' ? '展开宽页显示' : '收窄为书卷版心'"
+      @click="settings.width = settings.width === 'book' ? 'wide' : 'book'"
+    >
+      ⇔
+    </button>
+    <button class="tbtn" :title="modeTitle" @click="cycleMode()">{{ modeIcon }}</button>
+    <button class="tbtn" title="拉取最新 (git pull)" :disabled="pulling" @click="emit('pull')">
+      <span :class="{ spin: pulling }">⟳</span>
+    </button>
+    <button class="tbtn" title="大纲" :class="{ 'is-on': tocOpen }" @click="emit('toggle-toc')">☰›</button>
+    <button class="tbtn" title="设置" @click="emit('open-settings')">⚙</button>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useSettings } from '@/stores/settings'
+import type { GitStatus } from '@/core/backend'
+
+const props = defineProps<{
+  repoName: string
+  path: string
+  status: GitStatus | null
+  pulling: boolean
+  tocOpen: boolean
+}>()
+
+const emit = defineEmits<{
+  'toggle-side': []
+  'toggle-toc': []
+  pull: []
+  'open-settings': []
+}>()
+
+const settings = useSettings()
+
+const segments = computed(() => (props.path ? props.path.split('/') : []))
+
+const modeIcon = computed(() => (settings.mode === 'auto' ? '◐' : settings.mode === 'light' ? '☀' : '☾'))
+const modeTitle = computed(
+  () => `明暗模式:${settings.mode === 'auto' ? '跟随系统' : settings.mode === 'light' ? '浅色' : '深色'}(点击切换)`,
+)
+
+function cycleMode(): void {
+  settings.mode = settings.mode === 'auto' ? 'light' : settings.mode === 'light' ? 'dark' : 'auto'
+}
+</script>

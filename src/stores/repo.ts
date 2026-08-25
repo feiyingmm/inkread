@@ -1,0 +1,71 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { backend, type GitStatus, type RepoMeta, type TreeNode } from '@/core/backend'
+
+export const useRepoStore = defineStore('repo', () => {
+  const repos = ref<RepoMeta[]>([])
+  const currentRepoId = ref<string>('')
+  const tree = ref<TreeNode[]>([])
+  const status = ref<GitStatus | null>(null)
+  const loading = ref(false)
+  const pulling = ref(false)
+  const error = ref('')
+
+  async function init() {
+    loading.value = true
+    error.value = ''
+    try {
+      repos.value = await backend.listRepos()
+      if (!currentRepoId.value && repos.value.length > 0) {
+        currentRepoId.value = repos.value[0].id
+      }
+      if (currentRepoId.value) await refresh()
+    } catch (e) {
+      error.value = (e as Error).message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function refresh() {
+    tree.value = await backend.listTree(currentRepoId.value)
+    refreshStatus()
+  }
+
+  async function refreshStatus() {
+    try {
+      status.value = await backend.gitStatus(currentRepoId.value)
+    } catch {
+      status.value = null
+    }
+  }
+
+  /** 返回 pull 结果消息;changed 时已刷新文件树 */
+  async function pull(): Promise<{ ok: boolean; changed: boolean; message: string }> {
+    pulling.value = true
+    try {
+      const r = await backend.gitPull(currentRepoId.value)
+      if (r.changed) await refresh()
+      else refreshStatus()
+      return r
+    } catch (e) {
+      return { ok: false, changed: false, message: (e as Error).message }
+    } finally {
+      pulling.value = false
+    }
+  }
+
+  /** 在树中查找路径对应节点是否存在 */
+  function exists(path: string): boolean {
+    function walk(nodes: TreeNode[]): boolean {
+      for (const n of nodes) {
+        if (n.path === path) return true
+        if (n.type === 'dir' && n.children && path.startsWith(n.path + '/') && walk(n.children)) return true
+      }
+      return false
+    }
+    return walk(tree.value)
+  }
+
+  return { repos, currentRepoId, tree, status, loading, pulling, error, init, refresh, refreshStatus, pull, exists }
+})
