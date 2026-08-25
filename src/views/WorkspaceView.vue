@@ -24,10 +24,15 @@
           :status="repo.status"
           :pulling="repo.pulling"
           :toc-open="tocOpen"
+          :can-back="canBack"
+          :can-forward="canForward"
           @toggle-side="sideOpen = !sideOpen"
           @toggle-toc="tocOpen = !tocOpen"
           @pull="doPull"
           @open-settings="settingsOpen = true"
+          @back="router.back()"
+          @forward="router.forward()"
+          @open-palette="openPalette('files')"
         />
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
@@ -50,6 +55,14 @@
     </div>
 
     <SettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
+    <Palette
+      v-if="paletteOpen"
+      :repo-id="repo.currentRepoId"
+      :tree="repo.tree"
+      :initial-mode="paletteMode"
+      @close="paletteOpen = false"
+      @open="onPaletteOpen"
+    />
   </div>
 </template>
 
@@ -61,6 +74,7 @@ import TopBar from '@/components/TopBar.vue'
 import TocPanel from '@/components/TocPanel.vue'
 import MarkdownView from '@/components/MarkdownView.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import Palette from '@/components/Palette.vue'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
 import { dirOf, fileKind } from '@/core/paths'
@@ -77,12 +91,44 @@ const settings = useSettings()
 const sideOpen = ref(localStorage.getItem('inkread:side') !== '0')
 const tocOpen = ref(localStorage.getItem('inkread:toc') !== '0')
 const settingsOpen = ref(false)
+const paletteOpen = ref(false)
+const paletteMode = ref<'files' | 'search'>('files')
+const canBack = ref(false)
+const canForward = ref(false)
 const toc = ref<TocItem[]>([])
 const activeSlug = ref('')
 const mdView = ref<InstanceType<typeof MarkdownView> | null>(null)
 let pendingAnchor = ''
+let pendingHighlight = ''
 
 const currentPath = computed(() => String(route.query.f ?? ''))
+
+watch(
+  () => route.fullPath,
+  () => {
+    const st = window.history.state as { back?: unknown; forward?: unknown } | null
+    canBack.value = !!st?.back
+    canForward.value = !!st?.forward
+  },
+  { immediate: true },
+)
+
+function openPalette(mode: 'files' | 'search'): void {
+  paletteMode.value = mode
+  paletteOpen.value = true
+}
+
+function onPaletteOpen(path: string, highlight?: string): void {
+  pendingHighlight = highlight ?? ''
+  if (path === currentPath.value) {
+    if (pendingHighlight) {
+      mdView.value?.highlightText(pendingHighlight)
+      pendingHighlight = ''
+    }
+    return
+  }
+  openFile(path)
+}
 
 watch(sideOpen, (v) => localStorage.setItem('inkread:side', v ? '1' : '0'))
 watch(tocOpen, (v) => localStorage.setItem('inkread:toc', v ? '1' : '0'))
@@ -122,6 +168,11 @@ function onRendered(): void {
     pendingAnchor = ''
     setTimeout(() => mdView.value?.scrollToSlug(slug), 60)
   }
+  if (pendingHighlight) {
+    const q = pendingHighlight
+    pendingHighlight = ''
+    setTimeout(() => mdView.value?.highlightText(q), 80)
+  }
 }
 
 function onTocJump(slug: string): void {
@@ -134,9 +185,26 @@ async function doPull(): Promise<void> {
 }
 
 function onKeydown(e: KeyboardEvent): void {
-  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+  const key = e.key.toLowerCase()
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 'b') {
     e.preventDefault()
     sideOpen.value = !sideOpen.value
+  } else if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 'p') {
+    e.preventDefault()
+    openPalette('files')
+  } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === 'f') {
+    e.preventDefault()
+    openPalette('search')
+  } else if (e.altKey && e.key === 'ArrowLeft') {
+    e.preventDefault()
+    router.back()
+  } else if (e.altKey && e.key === 'ArrowRight') {
+    e.preventDefault()
+    router.forward()
+  } else if (e.key === 'Escape' && paletteOpen.value) {
+    paletteOpen.value = false
+  } else if (e.key === 'Escape' && settingsOpen.value) {
+    settingsOpen.value = false
   }
 }
 

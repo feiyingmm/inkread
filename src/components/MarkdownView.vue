@@ -55,10 +55,19 @@ function scrollKey(): string {
   return `inkread:scroll:${props.repoId}:${props.path}`
 }
 
+function clearHighlights(): void {
+  try {
+    CSS.highlights?.delete('inkread-search')
+  } catch {
+    /* 不支持 Highlight API 时忽略 */
+  }
+}
+
 async function load(): Promise<void> {
   const seq = ++loadSeq
   errorMsg.value = ''
   headings = []
+  clearHighlights()
   emit('toc', [])
   emit('active', '')
   if (!props.path) {
@@ -138,6 +147,38 @@ function scrollToSlug(slug: string): void {
     target = null
   }
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+/** 全文搜索跳转:高亮所有命中并滚动到第一处 */
+function highlightText(rawQuery: string): void {
+  const root = proseEl.value
+  const query = rawQuery.trim().toLowerCase()
+  if (!root || !query) return
+  clearHighlights()
+  const ranges: Range[] = []
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    const text = (node.textContent ?? '').toLowerCase()
+    let idx = 0
+    while ((idx = text.indexOf(query, idx)) >= 0) {
+      const r = new Range()
+      r.setStart(node, idx)
+      r.setEnd(node, idx + query.length)
+      ranges.push(r)
+      idx += query.length
+    }
+  }
+  if (ranges.length === 0) return
+  try {
+    if (CSS.highlights) {
+      CSS.highlights.set('inkread-search', new Highlight(...ranges))
+    }
+  } catch {
+    /* 不支持 Highlight API 时仅滚动 */
+  }
+  const first = ranges[0].startContainer.parentElement
+  first?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 function onClick(e: MouseEvent): void {
@@ -226,7 +267,7 @@ onBeforeUnmount(() => {
   scroller.value?.removeEventListener('scroll', onScroll)
 })
 
-defineExpose({ scrollToSlug })
+defineExpose({ scrollToSlug, highlightText })
 </script>
 
 <style scoped>

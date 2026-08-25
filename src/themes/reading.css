@@ -345,6 +345,16 @@
   padding: 4px 0;
 }
 
+/* 全文搜索命中(CSS Highlight API) */
+::highlight(inkread-search) {
+  background-color: #f6d76b;
+  color: #4a3a08;
+}
+:root[data-mode='dark'] ::highlight(inkread-search) {
+  background-color: #8a6d1f;
+  color: #f5e9c8;
+}
+
 /* ---------- 搜索高亮 ---------- */
 .prose mark,
 .prose .search-hit {

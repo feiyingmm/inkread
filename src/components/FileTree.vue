@@ -20,10 +20,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
 import type { TreeNode } from '@/core/backend'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     nodes: TreeNode[]
     current: string
@@ -35,6 +35,18 @@ withDefaults(
 const emit = defineEmits<{ open: [node: TreeNode] }>()
 
 const open = reactive<Record<string, boolean>>({})
+
+// 当前文档变化时自动展开其祖先目录(每层组件只负责自己这层)
+watch(
+  () => props.current,
+  (cur) => {
+    if (!cur) return
+    for (const n of props.nodes) {
+      if (n.type === 'dir' && cur.startsWith(n.path + '/')) open[n.path] = true
+    }
+  },
+  { immediate: true },
+)
 
 function label(n: TreeNode): string {
   if (n.type === 'file' && (n.ext === 'md' || n.ext === 'markdown')) {

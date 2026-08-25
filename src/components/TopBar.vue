@@ -1,6 +1,9 @@
 <template>
   <div class="topbar">
     <button class="tbtn" title="文库 (Ctrl+B)" @click="emit('toggle-side')">☰</button>
+    <button class="tbtn" title="后退 (Alt+←)" :disabled="!canBack" @click="emit('back')">←</button>
+    <button class="tbtn" title="前进 (Alt+→)" :disabled="!canForward" @click="emit('forward')">→</button>
+    <button class="tbtn" title="搜索 (Ctrl+P 文件 / Ctrl+Shift+F 全文)" @click="emit('open-palette')">🔍</button>
     <div class="crumbs">
       <span class="seg">{{ repoName }}</span>
       <template v-for="(seg, i) in segments" :key="i">
@@ -42,6 +45,8 @@ const props = defineProps<{
   status: GitStatus | null
   pulling: boolean
   tocOpen: boolean
+  canBack: boolean
+  canForward: boolean
 }>()
 
 const emit = defineEmits<{
@@ -49,6 +54,9 @@ const emit = defineEmits<{
   'toggle-toc': []
   pull: []
   'open-settings': []
+  back: []
+  forward: []
+  'open-palette': []
 }>()
 
 const settings = useSettings()
