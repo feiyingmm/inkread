@@ -57,4 +57,8 @@ export interface Backend {
   /** 冲突解决:local=以本地为准,remote=以远端为准 */
   gitResolve(repoId: string, strategy: 'local' | 'remote'): Promise<GitOpResult>
   search(repoId: string, query: string): Promise<SearchHit[]>
+  /** 外部链接用系统浏览器打开 */
+  openExternal(url: string): Promise<void>
+  /** 桌面端:把本地已有 git 仓库加入文库 */
+  addRepoLocal(path: string): Promise<RepoMeta>
 }

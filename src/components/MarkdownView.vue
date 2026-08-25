@@ -214,7 +214,7 @@ function onClick(e: MouseEvent): void {
     }
     if (/^https?:\/\//i.test(href)) {
       e.preventDefault()
-      window.open(href, '_blank', 'noopener')
+      void backend.openExternal(href)
       return
     }
     if (/^[a-z]+:/i.test(href)) return

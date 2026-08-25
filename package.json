@@ -10,10 +10,14 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
-    "postinstall": "node scripts/copy-vditor.mjs"
+    "postinstall": "node scripts/copy-vditor.mjs",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@mdit/plugin-katex": "^1.1.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.21",
     "lxgw-wenkai-screen-webfont": "^1.7.0",
@@ -27,6 +31,7 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.2.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "typescript": "^5.9.2",

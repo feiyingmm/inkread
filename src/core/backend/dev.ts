@@ -32,4 +32,10 @@ export const devBackend: Backend = {
   gitSync: (repo, message) => post<GitOpResult>(`/api/sync?repo=${enc(repo)}`, { message }),
   gitResolve: (repo, strategy) => post<GitOpResult>(`/api/resolve?repo=${enc(repo)}`, { strategy }),
   search: (repo, query) => get<SearchHit[]>(`/api/search?repo=${enc(repo)}&q=${enc(query)}`),
+  openExternal: (url) => {
+    window.open(url, '_blank', 'noopener')
+    return Promise.resolve()
+  },
+  addRepoLocal: () =>
+    Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 添加仓库')),
 }

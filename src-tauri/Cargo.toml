@@ -1,0 +1,31 @@
+[package]
+name = "inkread"
+version = "0.1.0"
+description = "墨阅 —— 跨平台 Markdown 阅读应用"
+authors = ["mahonggeng"]
+edition = "2021"
+
+[lib]
+name = "inkread_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+git2 = "0.20"
+percent-encoding = "2"
+
+# Android 交叉编译:静态 openssl(M5 启用 android target 时生效)
+[target.'cfg(target_os = "android")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

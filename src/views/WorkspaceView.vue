@@ -39,7 +39,12 @@
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
           <div class="sub">让每一篇 Markdown 静静展开,如书页般被阅读</div>
-          <div class="sub" style="opacity: 0.7">从左侧文库选择一篇文档开始</div>
+          <div v-if="repo.repos.length === 0 && isTauri" class="sub">
+            <button class="opt" style="height: 36px; font-size: 13.5px" @click="pickLocalRepo">
+              添加本地 git 仓库…
+            </button>
+          </div>
+          <div v-else class="sub" style="opacity: 0.7">从左侧文库选择一篇文档开始</div>
         </div>
         <MarkdownView
           v-else-if="!editMode"
@@ -89,7 +94,7 @@ import Palette from '@/components/Palette.vue'
 import EditorView from '@/components/EditorView.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import ConflictDialog from '@/components/ConflictDialog.vue'
-import { backend } from '@/core/backend'
+import { backend, isTauri } from '@/core/backend'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
 import { dirOf, fileKind } from '@/core/paths'
@@ -157,6 +162,18 @@ async function doSync(): Promise<void> {
   } finally {
     syncing.value = false
     repo.refreshStatus()
+  }
+}
+
+async function pickLocalRepo(): Promise<void> {
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const dir = await open({ directory: true, title: '选择本地 git 仓库目录' })
+    if (typeof dir !== 'string' || !dir) return
+    await backend.addRepoLocal(dir)
+    await repo.init()
+  } catch (e) {
+    toast((e as Error).message, true)
   }
 }
 
