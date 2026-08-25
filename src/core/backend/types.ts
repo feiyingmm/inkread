@@ -59,6 +59,8 @@ export interface Backend {
   listTree(repoId: string): Promise<TreeNode[]>
   readFile(repoId: string, path: string): Promise<FileContent>
   writeFile(repoId: string, path: string, content: string): Promise<void>
+  /** 写入二进制文件(base64 编码;目录不存在自动创建)——编辑贴图入库用 */
+  writeBinary(repoId: string, path: string, base64: string): Promise<void>
   /** 仓库内相对路径 → 可直接用于 <img src> 的 URL */
   assetUrl(repoId: string, path: string): string
   gitStatus(repoId: string): Promise<GitStatus>

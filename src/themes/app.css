@@ -321,6 +321,19 @@ button {
   color: var(--t3);
   opacity: 0.6;
 }
+.crumbs .seg-link {
+  border: none;
+  background: none;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 1px 3px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.crumbs .seg-link:hover {
+  background: var(--bg-hover);
+  color: var(--accent-deep);
+}
 
 .tbtn {
   display: inline-flex;
@@ -709,6 +722,90 @@ button {
   flex-shrink: 0;
 }
 
+/* ---------- 阅读进度 / 回顶 / 搜索导航 ---------- */
+.read-progress {
+  position: sticky;
+  top: 0;
+  height: 3px;
+  margin-bottom: -3px;
+  z-index: 22;
+  pointer-events: none;
+}
+.read-progress__bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.1s linear;
+}
+.back-top {
+  position: fixed;
+  right: 24px;
+  bottom: 46px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-card);
+  color: var(--t2);
+  font-size: 16px;
+  box-shadow: 0 4px 16px rgba(10, 25, 40, 0.18);
+  cursor: pointer;
+  z-index: 34;
+}
+.back-top:hover {
+  color: var(--accent-deep);
+  border-color: var(--accent);
+}
+.search-nav {
+  position: sticky;
+  top: 10px;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  margin: 0 18px 0 auto;
+  padding: 4px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(10, 25, 40, 0.18);
+}
+.sn-count {
+  font-size: 12px;
+  color: var(--t2);
+  padding: 0 6px;
+  font-family: var(--font-mono);
+}
+.sn-btn {
+  border: none;
+  background: none;
+  color: var(--t2);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 13px;
+}
+.sn-btn:hover {
+  background: var(--bg-hover);
+  color: var(--t1);
+}
+
+/* 导出菜单 */
+.export-menu {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  z-index: 40;
+  width: 190px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 6px;
+}
+
 /* ---------- Lightbox ---------- */
 .lightbox {
   position: fixed;
@@ -725,6 +822,59 @@ button {
   max-height: 92vh;
   border-radius: 8px;
   box-shadow: 0 12px 60px rgba(0, 0, 0, 0.6);
+}
+.lightbox-svg {
+  max-width: 94vw;
+  max-height: 92vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.6);
+}
+.lightbox-svg svg {
+  width: max(70vw, 100%);
+  height: auto;
+}
+
+/* ---------- 打印(另存 PDF) ---------- */
+@media print {
+  .shell {
+    padding: 0;
+    background: none;
+    height: auto;
+  }
+  .card {
+    display: block;
+    height: auto;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  .side,
+  .side-mask,
+  .topbar,
+  .toc,
+  .statusbar,
+  .fab-toc,
+  .back-top,
+  .search-nav,
+  .read-progress,
+  .resizer,
+  .toasts,
+  .fold-btn,
+  .code-copy {
+    display: none !important;
+  }
+  .content {
+    overflow: visible;
+    height: auto;
+  }
+  .prose {
+    max-width: none;
+  }
+  .fold-hidden {
+    display: revert !important;
+  }
 }
 
 /* ---------- Toast ---------- */

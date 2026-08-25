@@ -1,6 +1,6 @@
 [package]
 name = "inkread"
-version = "0.1.3"
+version = "0.2.0"
 description = "墨阅 —— 跨平台 Markdown 阅读应用"
 authors = ["mahonggeng"]
 edition = "2021"
@@ -20,6 +20,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 git2 = "0.20"
 percent-encoding = "2"
+base64 = "0.22"
+
+# 桌面:单实例(双击 md 文件复用已开窗口)
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2"
 
 # Android 交叉编译:静态 openssl(M5 启用 android target 时生效)
 [target.'cfg(target_os = "android")'.dependencies]

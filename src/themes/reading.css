@@ -350,9 +350,58 @@
   background-color: #f6d76b;
   color: #4a3a08;
 }
+::highlight(inkread-search-current) {
+  background-color: #e8912d;
+  color: #ffffff;
+}
 :root[data-mode='dark'] ::highlight(inkread-search) {
   background-color: #8a6d1f;
   color: #f5e9c8;
+}
+:root[data-mode='dark'] ::highlight(inkread-search-current) {
+  background-color: #d98324;
+  color: #1d1508;
+}
+
+/* 标题折叠 */
+.fold-btn {
+  border: none;
+  background: none;
+  color: var(--t3);
+  font-size: 0.75em;
+  width: 1.3em;
+  margin-left: -1.3em;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  vertical-align: middle;
+}
+.prose h2:hover .fold-btn,
+.prose h3:hover .fold-btn,
+.is-folded .fold-btn {
+  opacity: 1;
+}
+.is-folded .fold-btn {
+  transform: rotate(-90deg);
+  color: var(--accent);
+}
+.fold-hidden {
+  display: none !important;
+}
+
+/* ---------- 阅读纸色(浅色模式下生效;深色模式忽略) ---------- */
+:root[data-mode='light'][data-paper='sepia'] .content {
+  background: #f7f0de;
+}
+:root[data-mode='light'][data-paper='sepia'] .prose {
+  color: #433823;
+}
+:root[data-mode='light'][data-paper='green'] .content {
+  background: #e9f2e6;
+}
+:root[data-mode='light'][data-paper='green'] .prose {
+  color: #29392b;
 }
 
 /* ---------- 搜索高亮 ---------- */

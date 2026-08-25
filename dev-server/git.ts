@@ -50,8 +50,20 @@ export async function gitStatus(repoPath: string) {
   return { branch, dirtyCount: total, changes, ahead, behind }
 }
 
+/** 解析远程与当前分支;无远程/游离 HEAD 时给出明确结论,不依赖 upstream 配置 */
+async function remoteAndBranch(repoPath: string): Promise<{ remote?: string; branch?: string; note?: string }> {
+  const remotes = (await run(repoPath, ['remote'])).stdout.trim()
+  if (!remotes) return { note: '该文库没有远程仓库,无需拉取' }
+  const remote = remotes.split('\n').find((r) => r.trim() === 'origin')?.trim() ?? remotes.split('\n')[0].trim()
+  const branch = (await run(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim()
+  if (!branch || branch === 'HEAD') return { note: '当前处于游离 HEAD 状态,无法拉取' }
+  return { remote, branch }
+}
+
 export async function gitPull(repoPath: string) {
-  const r = await run(repoPath, ['pull', '--ff-only'])
+  const { remote, branch, note } = await remoteAndBranch(repoPath)
+  if (note) return { ok: true, changed: false, message: note }
+  const r = await run(repoPath, ['pull', '--ff-only', remote!, branch!])
   if (r.code !== 0) {
     const err = (r.stderr || r.stdout).trim()
     // 本地未提交修改会被覆盖 / 本地提交与远端分叉 → 提示可强制覆盖
@@ -68,11 +80,13 @@ export async function gitPull(repoPath: string) {
   return { ok: true, changed, message: changed ? '已拉取最新文档' : '已是最新' }
 }
 
-/** 放弃本地未推送内容,强制与远端一致(fetch + reset --hard 上游;未跟踪文件保留) */
+/** 放弃本地未推送内容,强制与远端一致(fetch + reset --hard FETCH_HEAD;未跟踪文件保留) */
 export async function gitPullForce(repoPath: string) {
-  const f = await run(repoPath, ['fetch'])
+  const { remote, branch, note } = await remoteAndBranch(repoPath)
+  if (note) return { ok: false, changed: false, message: note }
+  const f = await run(repoPath, ['fetch', remote!, branch!])
   if (f.code !== 0) return { ok: false, changed: false, message: (f.stderr || f.stdout).trim().slice(0, 500) }
-  const r = await run(repoPath, ['reset', '--hard', '@{upstream}'])
+  const r = await run(repoPath, ['reset', '--hard', 'FETCH_HEAD'])
   if (r.code !== 0) return { ok: false, changed: false, message: (r.stderr || r.stdout).trim().slice(0, 500) }
   return { ok: true, changed: true, message: '已放弃本地修改并与远端保持一致' }
 }
@@ -85,10 +99,12 @@ export async function gitSync(repoPath: string, message: string) {
     const c = await run(repoPath, ['commit', '-m', message])
     if (c.code !== 0) return { ok: false, changed: false, message: (c.stderr || c.stdout).trim().slice(0, 500) }
   }
-  let p = await run(repoPath, ['push'])
+  const { remote, branch, note } = await remoteAndBranch(repoPath)
+  if (note) return { ok: true, changed: st.dirtyCount > 0, message: `已提交(${note.replace(',无需拉取', ',未推送')})` }
+  let p = await run(repoPath, ['push', remote!, branch!])
   if (p.code !== 0) {
-    // 远端领先:rebase 后重推
-    const rb = await run(repoPath, ['pull', '--rebase'])
+    // 远端领先:rebase 后重推(无冲突的标准 git 自动合并;真冲突交外部工具)
+    const rb = await run(repoPath, ['pull', '--rebase', remote!, branch!])
     if (rb.code !== 0) {
       await run(repoPath, ['rebase', '--abort'])
       return {
@@ -98,7 +114,7 @@ export async function gitSync(repoPath: string, message: string) {
         message: '本地与远端存在冲突,请选择保留方式',
       }
     }
-    p = await run(repoPath, ['push'])
+    p = await run(repoPath, ['push', remote!, branch!])
     if (p.code !== 0) return { ok: false, changed: false, message: (p.stderr || p.stdout).trim().slice(0, 500) }
   }
   return { ok: true, changed: true, message: '已提交并推送' }

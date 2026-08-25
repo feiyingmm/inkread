@@ -16,6 +16,7 @@ export const tauriBackend: Backend = {
   listTree: (repoId) => invoke<TreeNode[]>('list_tree', { repoId }),
   readFile: (repoId, path) => invoke<FileContent>('read_file', { repoId, path }),
   writeFile: (repoId, path, content) => invoke<void>('write_file', { repoId, path, content }),
+  writeBinary: (repoId, path, base64) => invoke<void>('write_binary', { repoId, path, base64 }),
   assetUrl: (repoId, path) => convertFileSrc(`${repoId}/${path}`, 'repo'),
   gitStatus: (repoId) => invoke<GitStatus>('git_status', { repoId }),
   gitPull: (repoId) => invoke<GitOpResult>('git_pull', { repoId }),

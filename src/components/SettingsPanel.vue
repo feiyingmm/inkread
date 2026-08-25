@@ -40,6 +40,15 @@
       </div>
 
       <div class="set-group">
+        <div class="set-label">阅读纸色(浅色模式)</div>
+        <div class="set-row">
+          <button class="opt" :class="{ 'is-on': settings.paper === 'default' }" @click="settings.paper = 'default'">默认</button>
+          <button class="opt" :class="{ 'is-on': settings.paper === 'sepia' }" @click="settings.paper = 'sepia'">羊皮</button>
+          <button class="opt" :class="{ 'is-on': settings.paper === 'green' }" @click="settings.paper = 'green'">豆绿</button>
+        </div>
+      </div>
+
+      <div class="set-group">
         <div class="set-label">正文字号:{{ settings.fontSize }}px</div>
         <input v-model.number="settings.fontSize" type="range" min="14" max="20" step="1" class="set-range" />
       </div>

@@ -26,6 +26,8 @@ export const devBackend: Backend = {
   readFile: (repo, path) => get<FileContent>(`/api/file?repo=${enc(repo)}&path=${enc(path)}`),
   writeFile: (repo, path, content) =>
     post<void>(`/api/write?repo=${enc(repo)}&path=${enc(path)}`, { content }),
+  writeBinary: (repo, path, base64) =>
+    post<void>(`/api/write-binary?repo=${enc(repo)}&path=${enc(path)}`, { base64 }),
   assetUrl: (repo, path) => `/api/raw?repo=${enc(repo)}&path=${enc(path)}`,
   gitStatus: (repo) => get<GitStatus>(`/api/status?repo=${enc(repo)}`),
   gitPull: (repo) => post<GitOpResult>(`/api/pull?repo=${enc(repo)}`),

@@ -9,11 +9,16 @@ pub struct RepoEntry {
     pub id: String,
     pub name: String,
     pub path: String,
+    /// 单文件打开创建的临时文库,不持久化
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ephemeral: bool,
 }
 
 #[derive(Default)]
 pub struct AppState {
     pub repos: Mutex<Vec<RepoEntry>>,
+    /// 本次进程启动时随命令行传入的 md 文件(双击/打开方式)
+    pub launch_file: Mutex<Option<String>>,
 }
 
 fn config_dir(app: &AppHandle) -> PathBuf {
@@ -44,7 +49,8 @@ pub fn load_repos(app: &AppHandle) -> Vec<RepoEntry> {
 }
 
 pub fn save_repos(app: &AppHandle, repos: &[RepoEntry]) -> Result<(), String> {
-    let text = serde_json::to_string_pretty(repos).map_err(|e| e.to_string())?;
+    let persistent: Vec<&RepoEntry> = repos.iter().filter(|r| !r.ephemeral).collect();
+    let text = serde_json::to_string_pretty(&persistent).map_err(|e| e.to_string())?;
     fs::write(repos_file(app), text).map_err(|e| e.to_string())
 }
 

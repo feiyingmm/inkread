@@ -12,7 +12,13 @@
           <span class="tname">{{ label(n) }}</span>
         </div>
         <div v-if="n.type === 'dir' && open[n.path]" class="tree-children">
-          <FileTree :nodes="n.children ?? []" :current="current" :depth="depth + 1" @open="emit('open', $event)" />
+          <FileTree
+            :nodes="n.children ?? []"
+            :current="current"
+            :reveal="reveal"
+            :depth="depth + 1"
+            @open="emit('open', $event)"
+          />
         </div>
       </div>
     </template>
@@ -27,22 +33,23 @@ const props = withDefaults(
   defineProps<{
     nodes: TreeNode[]
     current: string
+    reveal?: string
     depth?: number
   }>(),
-  { depth: 0 },
+  { depth: 0, reveal: '' },
 )
 
 const emit = defineEmits<{ open: [node: TreeNode] }>()
 
 const open = reactive<Record<string, boolean>>({})
 
-// 当前文档变化时自动展开其祖先目录(每层组件只负责自己这层)
+// 当前文档 / 外部定位请求(面包屑点击)变化时自动展开祖先目录(每层组件只负责自己这层)
 watch(
-  () => props.current,
+  () => props.reveal || props.current,
   (cur) => {
     if (!cur) return
     for (const n of props.nodes) {
-      if (n.type === 'dir' && cur.startsWith(n.path + '/')) open[n.path] = true
+      if (n.type === 'dir' && (cur === n.path || cur.startsWith(n.path + '/'))) open[n.path] = true
     }
   },
   { immediate: true },

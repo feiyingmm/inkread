@@ -51,6 +51,7 @@ fn add_repo_local(app: AppHandle, state: State<AppState>, path: String) -> Resul
         id: id.clone(),
         name: name.clone(),
         path,
+        ephemeral: false,
     });
     state::save_repos(&app, &repos)?;
     Ok(RepoMeta { id, name })
@@ -106,9 +107,73 @@ fn add_repo_clone(
         id: id.clone(),
         name: name.clone(),
         path: dest.to_string_lossy().to_string(),
+        ephemeral: false,
     });
     state::save_repos(&app, &repos)?;
     Ok(RepoMeta { id, name })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenedPath {
+    repo_id: String,
+    path: String,
+}
+
+/// 双击/「打开方式」进入的单文件:以文件所在目录建临时文库(不持久化,复用同目录条目)
+#[tauri::command]
+fn open_path(state: State<AppState>, path: String) -> Result<OpenedPath, String> {
+    let abs = std::path::PathBuf::from(&path);
+    if !abs.is_file() {
+        return Err(format!("文件不存在: {path}"));
+    }
+    let dir = abs
+        .parent()
+        .ok_or_else(|| "无法确定文件所在目录".to_string())?
+        .to_path_buf();
+    let file_name = abs
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .ok_or_else(|| "无法解析文件名".to_string())?;
+    let dir_str = dir.to_string_lossy().to_string();
+
+    let mut repos = state.repos.lock().map_err(|e| e.to_string())?;
+    if let Some(existing) = repos.iter().find(|r| r.path == dir_str) {
+        return Ok(OpenedPath {
+            repo_id: existing.id.clone(),
+            path: file_name,
+        });
+    }
+    let name = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "文件夹".into());
+    let mut id = format!("{name}(临时)");
+    let mut n = 1;
+    while repos.iter().any(|r| r.id == id) {
+        n += 1;
+        id = format!("{name}(临时{n})");
+    }
+    repos.push(RepoEntry {
+        id: id.clone(),
+        name: id.clone(),
+        path: dir_str,
+        ephemeral: true,
+    });
+    Ok(OpenedPath { repo_id: id, path: file_name })
+}
+
+/// 取出本次进程启动时随命令行传入的 md 文件路径(消费一次)
+#[tauri::command]
+fn take_launch_file(state: State<AppState>) -> Option<String> {
+    state.launch_file.lock().ok()?.take()
+}
+
+fn pick_md_from_args<I: IntoIterator<Item = String>>(args: I) -> Option<String> {
+    args.into_iter().skip(1).find(|a| {
+        let lower = a.to_lowercase();
+        (lower.ends_with(".md") || lower.ends_with(".markdown")) && std::path::Path::new(a).is_file()
+    })
 }
 
 #[tauri::command]
@@ -129,6 +194,20 @@ fn write_file(app: AppHandle, repo_id: String, path: String, content: String) ->
     let root = state::repo_path(&app, &repo_id)?;
     let abs = state::resolve_in_repo(&root, &path)?;
     fsops::write_file(&abs, &content)
+}
+
+#[tauri::command]
+fn write_binary(app: AppHandle, repo_id: String, path: String, base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let root = state::repo_path(&app, &repo_id)?;
+    let abs = state::resolve_in_repo(&root, &path)?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64.as_bytes())
+        .map_err(|e| format!("图片数据解码失败: {e}"))?;
+    if let Some(parent) = abs.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&abs, bytes).map_err(|e| format!("写入失败: {e}"))
 }
 
 #[tauri::command]
@@ -170,6 +249,12 @@ fn search_repo(app: AppHandle, repo_id: String, query: String) -> Result<Vec<fso
         return Ok(Vec::new());
     }
     fsops::search(&root, query.trim())
+}
+
+/// 导出文件到用户经保存对话框选择的任意路径(仓库外)
+#[tauri::command]
+fn export_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))
 }
 
 #[tauri::command]
@@ -218,7 +303,21 @@ fn serve_repo_asset(app: &AppHandle, uri_path: &str) -> Result<(Vec<u8>, &'stati
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    // 单实例:再次双击 md 文件时复用已开窗口(仅桌面)
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        use tauri::Emitter;
+        if let Some(p) = pick_md_from_args(argv) {
+            let _ = app.emit("open-file", p);
+        }
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.set_focus();
+        }
+    }));
+
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
@@ -244,18 +343,23 @@ pub fn run() {
             list_tree,
             read_file,
             write_file,
+            write_binary,
             git_status,
             git_pull,
             git_pull_force,
             git_sync,
             search_repo,
             save_token,
-            get_token
+            get_token,
+            export_file,
+            open_path,
+            take_launch_file
         ])
         .setup(|app| {
             let loaded = state::load_repos(app.handle());
             let state = app.state::<AppState>();
             *state.repos.lock().unwrap() = loaded;
+            *state.launch_file.lock().unwrap() = pick_md_from_args(std::env::args());
             Ok(())
         })
         .run(tauri::generate_context!())

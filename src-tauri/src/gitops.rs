@@ -134,13 +134,23 @@ fn ahead_behind(repo: &Repository, branch: &str) -> Result<(usize, usize), Strin
         .map_err(|e| e.message().to_string())
 }
 
-fn fetch_origin(
+/// 选用远程:优先 origin,否则第一个;没有远程返回 None
+fn pick_remote(repo: &Repository) -> Option<String> {
+    if repo.find_remote("origin").is_ok() {
+        return Some("origin".into());
+    }
+    let names = repo.remotes().ok()?;
+    names.get(0).map(|s| s.to_string())
+}
+
+fn fetch_remote(
     repo: &Repository,
+    remote_name: &str,
     branch: &str,
     tokens: HashMap<String, String>,
 ) -> Result<(), String> {
     let mut remote = repo
-        .find_remote("origin")
+        .find_remote(remote_name)
         .map_err(|e| e.message().to_string())?;
     let mut fo = FetchOptions::new();
     fo.remote_callbacks(make_callbacks(tokens));
@@ -151,8 +161,14 @@ fn fetch_origin(
 
 pub fn pull(path: &Path, tokens: HashMap<String, String>) -> Result<GitOpResult, String> {
     let repo = open(path)?;
+    let Some(remote_name) = pick_remote(&repo) else {
+        return Ok(GitOpResult::simple(true, false, "该文库没有远程仓库,无需拉取"));
+    };
     let branch = current_branch(&repo)?;
-    fetch_origin(&repo, &branch, tokens)?;
+    if branch == "HEAD" {
+        return Ok(GitOpResult::simple(true, false, "当前处于游离 HEAD 状态,无法拉取"));
+    }
+    fetch_remote(&repo, &remote_name, &branch, tokens)?;
 
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
@@ -206,8 +222,11 @@ pub fn pull(path: &Path, tokens: HashMap<String, String>) -> Result<GitOpResult,
 /// 放弃本地一切未推送内容,强制与远端一致(fetch + reset --hard 到远端;未跟踪文件保留)
 pub fn pull_force(path: &Path, tokens: HashMap<String, String>) -> Result<GitOpResult, String> {
     let repo = open(path)?;
+    let Some(remote_name) = pick_remote(&repo) else {
+        return Ok(GitOpResult::simple(false, false, "该文库没有远程仓库".into()));
+    };
     let branch = current_branch(&repo)?;
-    fetch_origin(&repo, &branch, tokens)?;
+    fetch_remote(&repo, &remote_name, &branch, tokens)?;
     let fetch_head = repo
         .find_reference("FETCH_HEAD")
         .map_err(|e| e.message().to_string())?;
@@ -225,6 +244,7 @@ pub fn sync(
     tokens: HashMap<String, String>,
 ) -> Result<GitOpResult, String> {
     let repo = open(path)?;
+    let remote_name = pick_remote(&repo);
     let branch = current_branch(&repo)?;
 
     // 有工作区变更则全部提交
@@ -255,9 +275,12 @@ pub fn sync(
             .map_err(|e| format!("提交失败: {}", e.message()))?;
     }
 
-    // 推送;被拒则检查是否远端领先(冲突场景交由前端二选一)
+    // 推送;被拒则检查是否远端领先(冲突场景交由前端提示外部工具处理)
+    let Some(remote_name) = remote_name else {
+        return Ok(GitOpResult::simple(true, dirty, "已提交(该文库没有远程仓库,未推送)"));
+    };
     let mut remote = repo
-        .find_remote("origin")
+        .find_remote(&remote_name)
         .map_err(|e| e.message().to_string())?;
     let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
     let mut po = PushOptions::new();
@@ -265,7 +288,7 @@ pub fn sync(
     match remote.push(&[refspec.as_str()], Some(&mut po)) {
         Ok(()) => Ok(GitOpResult::simple(true, true, "已提交并推送")),
         Err(push_err) => {
-            fetch_origin(&repo, &branch, tokens)?;
+            fetch_remote(&repo, &remote_name, &branch, tokens)?;
             let (_, behind) = ahead_behind(&repo, &branch).unwrap_or((0, 0));
             if behind > 0 {
                 Ok(GitOpResult {

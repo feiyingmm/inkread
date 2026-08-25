@@ -33,7 +33,7 @@
           <div v-if="repo.error" class="tree-empty">{{ repo.error }}</div>
           <div v-else-if="repo.loading" class="tree-empty">加载中…</div>
           <div v-else-if="repo.tree.length === 0" class="tree-empty">仓库为空</div>
-          <FileTree v-else :nodes="repo.tree" :current="currentPath" @open="onOpenNode" />
+          <FileTree v-else :nodes="repo.tree" :current="currentPath" :reveal="treeReveal" @open="onOpenNode" />
         </div>
       </aside>
 
@@ -62,6 +62,7 @@
           :can-edit="canEdit"
           :edit-mode="editMode"
           :dirty="editorDirty"
+          :source-mode="sourceMode"
           @toggle-side="sideOpen = !sideOpen"
           @toggle-toc="tocOpen = !tocOpen"
           @pull="doPull"
@@ -71,6 +72,9 @@
           @open-palette="openPalette('files')"
           @set-edit="setEdit"
           @save="editorRef?.save()"
+          @toggle-source="mdView?.toggleSource()"
+          @export="doExport"
+          @crumb="onCrumb"
         />
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
@@ -94,6 +98,7 @@
           @active="activeSlug = $event"
           @open="onOpenLink"
           @rendered="onRendered"
+          @source-mode="sourceMode = $event"
         />
         <EditorView
           v-else
@@ -128,6 +133,7 @@
       :repo-id="repo.currentRepoId"
       :tree="repo.tree"
       :initial-mode="paletteMode"
+      :recent="recentFiles"
       @close="paletteOpen = false"
       @open="onPaletteOpen"
     />
@@ -221,6 +227,48 @@ const isNarrow = ref(narrowMq.matches)
 narrowMq.addEventListener('change', (e) => (isNarrow.value = e.matches))
 const tocSheetOpen = ref(false)
 const changesOpen = ref(false)
+const sourceMode = ref(false)
+const treeReveal = ref('')
+
+function onCrumb(dirPath: string): void {
+  sideOpen.value = true
+  treeReveal.value = dirPath
+}
+
+async function doExport(type: 'html' | 'print'): Promise<void> {
+  if (type === 'print') {
+    window.print()
+    return
+  }
+  const prose = document.querySelector<HTMLElement>('.prose')
+  if (!prose) {
+    toast('没有可导出的内容', true)
+    return
+  }
+  try {
+    toast('正在生成 HTML…')
+    const name = currentPath.value.split('/').pop()?.replace(/\.(md|markdown)$/i, '') || 'export'
+    const { buildExportHtml } = await import('@/core/export')
+    const htmlText = await buildExportHtml(name, prose)
+    if (isTauri) {
+      const { save } = await import('@tauri-apps/plugin-dialog')
+      const dest = await save({ defaultPath: `${name}.html`, filters: [{ name: 'HTML', extensions: ['html'] }] })
+      if (!dest) return
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('export_file', { path: dest, content: htmlText })
+    } else {
+      const blob = new Blob([htmlText], { type: 'text/html' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${name}.html`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    }
+    toast('已导出 HTML')
+  } catch (e) {
+    toast(`导出失败:${(e as Error).message}`, true)
+  }
+}
 
 function onOpenChange(path: string): void {
   changesOpen.value = false
@@ -233,12 +281,31 @@ function onOpenChange(path: string): void {
 
 const currentPath = computed(() => String(route.query.f ?? ''))
 
-// 记录每个仓库最后阅读的文档,冷启动(Tauri 无 URL hash)时恢复
+// 记录每个仓库最后阅读的文档(冷启动恢复)与最近阅读列表(Ctrl+P 空输入展示)
 watch(currentPath, (p) => {
   if (p && repo.currentRepoId) {
     localStorage.setItem(`inkread:lastdoc:${repo.currentRepoId}`, p)
+    const key = `inkread:recent:${repo.currentRepoId}`
+    try {
+      const arr = JSON.parse(localStorage.getItem(key) ?? '[]') as string[]
+      localStorage.setItem(key, JSON.stringify([p, ...arr.filter((x) => x !== p)].slice(0, 20)))
+    } catch {
+      localStorage.setItem(key, JSON.stringify([p]))
+    }
   }
 })
+
+const recentFiles = ref<string[]>([])
+
+function loadRecent(): void {
+  try {
+    recentFiles.value = (JSON.parse(localStorage.getItem(`inkread:recent:${repo.currentRepoId}`) ?? '[]') as string[]).filter(
+      (p) => repo.exists(p),
+    )
+  } catch {
+    recentFiles.value = []
+  }
+}
 
 /** 无指定文档时的默认打开:上次阅读 → INDEX.md → 欢迎页 */
 function openDefaultDoc(): void {
@@ -412,6 +479,7 @@ watch(
 
 function openPalette(mode: 'files' | 'search'): void {
   paletteMode.value = mode
+  loadRecent()
   paletteOpen.value = true
 }
 
@@ -502,6 +570,9 @@ function onKeydown(e: KeyboardEvent): void {
   } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === 'f') {
     e.preventDefault()
     openPalette('search')
+  } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '/') {
+    e.preventDefault()
+    if (!editMode.value) void mdView.value?.toggleSource()
   } else if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 'e') {
     e.preventDefault()
     if (canEdit.value) setEdit(!editMode.value)
@@ -523,11 +594,33 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
+/** Tauri:双击 md / 「打开方式」进入的单文件,以所在目录建临时文库打开 */
+async function setupTauriFileOpen(): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  const { listen } = await import('@tauri-apps/api/event')
+  const openAbs = async (abs: string) => {
+    try {
+      const r = await invoke<{ repoId: string; path: string }>('open_path', { path: abs })
+      await repo.init()
+      if (repo.currentRepoId !== r.repoId) await repo.setCurrent(r.repoId)
+      openFile(r.path)
+    } catch (e) {
+      toast(typeof e === 'string' ? e : (e as Error).message, true)
+    }
+  }
+  const lf = await invoke<string | null>('take_launch_file')
+  if (lf) await openAbs(lf)
+  await listen<string>('open-file', (e) => void openAbs(e.payload))
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   await repo.init()
   if (!currentPath.value) {
     openDefaultDoc()
+  }
+  if (isTauri) {
+    void setupTauriFileOpen()
   }
   if (settings.autoPull && repo.currentRepoId) {
     const r = await repo.pull()

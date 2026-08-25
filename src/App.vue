@@ -16,6 +16,7 @@ watchEffect(() => {
   const el = document.documentElement
   el.dataset.brand = settings.brand
   el.dataset.mode = settings.isDark ? 'dark' : 'light'
+  el.dataset.paper = settings.paper
   el.style.setProperty('--prose-size', `${settings.fontSize}px`)
 })
 </script>

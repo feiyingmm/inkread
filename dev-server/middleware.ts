@@ -243,6 +243,13 @@ export function inkreadDevServer(): Plugin {
               await fsp.writeFile(abs, body.content ?? '', 'utf-8')
               return json(res, { ok: true })
             }
+            case '/write-binary': {
+              const body = JSON.parse((await readBody(req)) || '{}') as { base64?: string }
+              const abs = resolveInRepo(repo, relPath)
+              await fsp.mkdir(path.dirname(abs), { recursive: true })
+              await fsp.writeFile(abs, Buffer.from(body.base64 ?? '', 'base64'))
+              return json(res, { ok: true })
+            }
             case '/search': {
               const q = url.searchParams.get('q') ?? ''
               if (!q.trim()) return json(res, [])

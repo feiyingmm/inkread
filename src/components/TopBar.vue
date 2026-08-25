@@ -8,7 +8,15 @@
       <span class="seg">{{ repoName }}</span>
       <template v-for="(seg, i) in segments" :key="i">
         <span class="sep">/</span>
-        <span class="seg">{{ seg }}</span>
+        <button
+          v-if="i < segments.length - 1"
+          class="seg seg-link"
+          title="在文库中定位该目录"
+          @click="emit('crumb', segments.slice(0, i + 1).join('/'))"
+        >
+          {{ seg }}
+        </button>
+        <span v-else class="seg">{{ seg }}</span>
       </template>
     </div>
 
@@ -38,13 +46,32 @@
     <button class="tbtn" title="拉取最新 (git pull)" :disabled="pulling" @click="emit('pull')">
       <span :class="{ spin: pulling }">⟳</span>
     </button>
+    <button
+      v-if="canEdit && !editMode"
+      class="tbtn"
+      :class="{ 'is-on': sourceMode }"
+      :title="sourceMode ? '返回渲染视图 (Ctrl+/)' : '查看 Markdown 源码 (Ctrl+/)'"
+      @click="emit('toggle-source')"
+    >
+      &lt;/&gt;
+    </button>
+    <div v-if="canEdit && !editMode" style="position: relative">
+      <button class="tbtn" title="导出" @click="exportOpen = !exportOpen">⤓</button>
+      <template v-if="exportOpen">
+        <div class="repo-menu-mask" @click="exportOpen = false"></div>
+        <div class="export-menu">
+          <button class="repo-item" @click="doExport('html')">导出 HTML(自包含)</button>
+          <button class="repo-item" @click="doExport('print')">打印 / 另存 PDF</button>
+        </div>
+      </template>
+    </div>
     <button class="tbtn hide-narrow" title="大纲" :class="{ 'is-on': tocOpen }" @click="emit('toggle-toc')">☰›</button>
     <button class="tbtn" title="设置" @click="emit('open-settings')">⚙</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useSettings } from '@/stores/settings'
 
 const props = defineProps<{
@@ -57,6 +84,7 @@ const props = defineProps<{
   canEdit: boolean
   editMode: boolean
   dirty: boolean
+  sourceMode: boolean
 }>()
 
 const emit = defineEmits<{
@@ -69,7 +97,17 @@ const emit = defineEmits<{
   'open-palette': []
   'set-edit': [on: boolean]
   save: []
+  'toggle-source': []
+  export: [type: 'html' | 'print']
+  crumb: [dirPath: string]
 }>()
+
+const exportOpen = ref(false)
+
+function doExport(type: 'html' | 'print'): void {
+  exportOpen.value = false
+  emit('export', type)
+}
 
 const settings = useSettings()
 

@@ -10,6 +10,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { backend } from '@/core/backend'
+import { dirOf } from '@/core/paths'
 import { useSettings } from '@/stores/settings'
 import { toast } from '@/core/toast'
 
@@ -63,6 +64,34 @@ function onInput(): void {
   }
 }
 
+/** 粘贴/拖入图片:存入文档同级 assets/ 并插入相对链接 */
+async function saveImages(files: File[]): Promise<void> {
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue
+    try {
+      const dataUrl = await new Promise<string>((ok, err) => {
+        const fr = new FileReader()
+        fr.onload = () => ok(String(fr.result))
+        fr.onerror = err
+        fr.readAsDataURL(f)
+      })
+      const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+      const ext = (f.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg')
+      const t = new Date()
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const name = `img_${t.getFullYear()}${pad(t.getMonth() + 1)}${pad(t.getDate())}_${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}_${Math.floor(Math.random() * 90 + 10)}.${ext}`
+      const dir = dirOf(props.path)
+      const repoRel = `${dir ? dir + '/' : ''}assets/${name}`
+      await backend.writeBinary(props.repoId, repoRel, base64)
+      vditor?.insertValue(`![](assets/${name})`)
+      toast('图片已存入 assets/')
+      onInput()
+    } catch (e) {
+      toast(`图片保存失败:${(e as Error).message}`, true)
+    }
+  }
+}
+
 onMounted(async () => {
   try {
     const file = await backend.readFile(props.repoId, props.path)
@@ -87,6 +116,13 @@ onMounted(async () => {
         'undo', 'redo', 'outline',
       ],
       counter: { enable: false },
+      upload: {
+        accept: 'image/*',
+        handler: (files: File[]) => {
+          void saveImages(files)
+          return null
+        },
+      },
       input: () => onInput(),
       after: () => {
         editorReady = true

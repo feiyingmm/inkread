@@ -15,6 +15,7 @@
 
       <div ref="listEl" class="palette-body">
         <template v-if="mode === 'files'">
+          <div v-if="showingRecent" class="palette-group">最近阅读</div>
           <div v-if="fileHits.length === 0" class="palette-empty">无匹配文件</div>
           <button
             v-for="(f, i) in fileHits"
@@ -71,6 +72,7 @@ const props = defineProps<{
   repoId: string
   tree: TreeNode[]
   initialMode: 'files' | 'search'
+  recent: string[]
 }>()
 
 const emit = defineEmits<{
@@ -100,7 +102,12 @@ const allFiles = computed(() => {
   return out
 })
 
-const fileHits = computed(() => fuzzyFilter(query.value, allFiles.value, (p) => p, 60))
+// 空输入先展示最近阅读,有输入才做全库模糊匹配
+const fileHits = computed(() => {
+  if (!query.value.trim() && props.recent.length > 0) return props.recent.slice(0, 20)
+  return fuzzyFilter(query.value, allFiles.value, (p) => p, 60)
+})
+const showingRecent = computed(() => !query.value.trim() && props.recent.length > 0)
 
 const flatSearch = computed<FlatHit[]>(() => searchHits.value.map((h, idx) => ({ ...h, idx })))
 

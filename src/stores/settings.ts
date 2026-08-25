@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 export type Brand = 'ink' | 'violet'
 export type Mode = 'auto' | 'light' | 'dark'
 export type ReadWidth = 'book' | 'wide'
+export type Paper = 'default' | 'sepia' | 'green'
 
 const KEY = 'inkread:settings'
 
@@ -15,6 +16,7 @@ interface Persisted {
   serifBody: boolean
   autoPull: boolean
   autoSave: boolean
+  paper: Paper
 }
 
 function load(): Partial<Persisted> {
@@ -34,6 +36,7 @@ export const useSettings = defineStore('settings', () => {
   const serifBody = ref<boolean>(saved.serifBody ?? false)
   const autoPull = ref<boolean>(saved.autoPull ?? true)
   const autoSave = ref<boolean>(saved.autoSave ?? false)
+  const paper = ref<Paper>(saved.paper ?? 'default')
 
   const media = window.matchMedia('(prefers-color-scheme: dark)')
   const sysDark = ref(media.matches)
@@ -42,7 +45,7 @@ export const useSettings = defineStore('settings', () => {
   const isDark = computed(() => mode.value === 'dark' || (mode.value === 'auto' && sysDark.value))
 
   watch(
-    [brand, mode, width, fontSize, serifBody, autoPull, autoSave],
+    [brand, mode, width, fontSize, serifBody, autoPull, autoSave, paper],
     () => {
       const data: Persisted = {
         brand: brand.value,
@@ -52,11 +55,12 @@ export const useSettings = defineStore('settings', () => {
         serifBody: serifBody.value,
         autoPull: autoPull.value,
         autoSave: autoSave.value,
+        paper: paper.value,
       }
       localStorage.setItem(KEY, JSON.stringify(data))
     },
     { deep: false },
   )
 
-  return { brand, mode, width, fontSize, serifBody, autoPull, autoSave, isDark }
+  return { brand, mode, width, fontSize, serifBody, autoPull, autoSave, paper, isDark }
 })
