@@ -232,6 +232,23 @@ function onOpenChange(path: string): void {
 }
 
 const currentPath = computed(() => String(route.query.f ?? ''))
+
+// 记录每个仓库最后阅读的文档,冷启动(Tauri 无 URL hash)时恢复
+watch(currentPath, (p) => {
+  if (p && repo.currentRepoId) {
+    localStorage.setItem(`inkread:lastdoc:${repo.currentRepoId}`, p)
+  }
+})
+
+/** 无指定文档时的默认打开:上次阅读 → INDEX.md → 欢迎页 */
+function openDefaultDoc(): void {
+  const last = localStorage.getItem(`inkread:lastdoc:${repo.currentRepoId}`)
+  if (last && repo.exists(last)) {
+    openFile(last)
+  } else if (repo.exists('INDEX.md')) {
+    openFile('INDEX.md')
+  }
+}
 // 手机端纯阅读:Android 上不提供编辑入口
 const canEdit = computed(() => fileKind(currentPath.value) === 'markdown' && !isAndroid)
 
@@ -339,7 +356,7 @@ async function switchRepo(id: string): Promise<void> {
   }
   await repo.setCurrent(id)
   await router.replace({ query: {} })
-  if (repo.exists('INDEX.md')) openFile('INDEX.md')
+  openDefaultDoc()
 }
 
 function onAddLocal(): void {
@@ -509,8 +526,8 @@ function onKeydown(e: KeyboardEvent): void {
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   await repo.init()
-  if (!currentPath.value && repo.exists('INDEX.md')) {
-    openFile('INDEX.md')
+  if (!currentPath.value) {
+    openDefaultDoc()
   }
   if (settings.autoPull && repo.currentRepoId) {
     const r = await repo.pull()

@@ -228,6 +228,7 @@ pub fn run() {
                 Ok((bytes, mime)) => tauri::http::Response::builder()
                     .header("Content-Type", mime)
                     .header("Access-Control-Allow-Origin", "*")
+                    .header("Cache-Control", "public, max-age=3600")
                     .body(bytes)
                     .unwrap(),
                 Err(e) => tauri::http::Response::builder()

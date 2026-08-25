@@ -58,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { backend, type SearchHit, type TreeNode } from '@/core/backend'
 import { fuzzyFilter } from '@/core/fuzzy'
 import { fileKind } from '@/core/paths'
@@ -234,5 +234,9 @@ watch(query, () => {
 
 onMounted(() => {
   inputEl.value?.focus()
+})
+
+onBeforeUnmount(() => {
+  if (searchTimer) clearTimeout(searchTimer)
 })
 </script>

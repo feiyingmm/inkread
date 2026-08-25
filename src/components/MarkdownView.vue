@@ -265,6 +265,7 @@ watch(scroller, (el, old) => {
 
 onBeforeUnmount(() => {
   scroller.value?.removeEventListener('scroll', onScroll)
+  if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
 })
 
 defineExpose({ scrollToSlug, highlightText, reload: load })
