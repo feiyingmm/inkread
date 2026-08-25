@@ -8,3 +8,4 @@ dev-server/repos.local.json
 *.log
 src-tauri/target/
 src-tauri/gen/
+public/vditor/

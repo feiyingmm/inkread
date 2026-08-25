@@ -9,7 +9,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "postinstall": "node scripts/copy-vditor.mjs"
   },
   "dependencies": {
     "@mdit/plugin-katex": "^1.1.0",
@@ -21,6 +22,7 @@
     "markdown-it-front-matter": "^0.2.4",
     "mermaid": "^11.9.0",
     "pinia": "^3.0.3",
+    "vditor": "^3.11.3",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"
   },

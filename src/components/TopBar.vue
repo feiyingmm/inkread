@@ -12,9 +12,9 @@
       </template>
     </div>
 
-    <div v-if="status" class="git-badge" :title="`分支 ${status.branch},本地变更 ${status.dirtyCount} 个`">
-      <span>{{ status.branch }}</span>
-      <span v-if="status.dirtyCount > 0" class="dot"></span>
+    <div v-if="canEdit" class="seg-group">
+      <button :class="{ 'is-on': !editMode }" title="阅读视图 (Ctrl+E)" @click="emit('set-edit', false)">阅读</button>
+      <button :class="{ 'is-on': editMode }" title="编辑模式 (Ctrl+E)" @click="emit('set-edit', true)">编辑</button>
     </div>
 
     <button
@@ -37,16 +37,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSettings } from '@/stores/settings'
-import type { GitStatus } from '@/core/backend'
 
 const props = defineProps<{
   repoName: string
   path: string
-  status: GitStatus | null
   pulling: boolean
   tocOpen: boolean
   canBack: boolean
   canForward: boolean
+  canEdit: boolean
+  editMode: boolean
 }>()
 
 const emit = defineEmits<{
@@ -57,6 +57,7 @@ const emit = defineEmits<{
   back: []
   forward: []
   'open-palette': []
+  'set-edit': [on: boolean]
 }>()
 
 const settings = useSettings()

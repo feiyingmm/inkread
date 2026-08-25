@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { loadRepos, findRepo, resolveInRepo, type DevRepo } from './repos'
-import { gitPull, gitStatus, gitSync } from './git'
+import { gitPull, gitResolve, gitStatus, gitSync } from './git'
 
 const TEXT_EXT = new Set(['md', 'markdown', 'txt', 'sql', 'html', 'htm', 'json', 'yml', 'yaml', 'xml', 'csv', 'js', 'ts', 'css', 'sh', 'py', 'java', 'properties', 'conf', 'ini', 'log'])
 const MIME: Record<string, string> = {
@@ -149,6 +149,10 @@ export function inkreadDevServer(): Plugin {
             case '/sync': {
               const body = JSON.parse((await readBody(req)) || '{}') as { message?: string }
               return json(res, await gitSync(repo.path, body.message ?? 'docs: 更新文档'))
+            }
+            case '/resolve': {
+              const body = JSON.parse((await readBody(req)) || '{}') as { strategy?: 'local' | 'remote' }
+              return json(res, await gitResolve(repo.path, body.strategy === 'remote' ? 'remote' : 'local'))
             }
             case '/write': {
               const body = JSON.parse((await readBody(req)) || '{}') as { content?: string }

@@ -19,6 +19,7 @@ export interface FileContent {
 export interface GitStatus {
   branch: string
   dirtyCount: number
+  dirtyFiles: string[]
   ahead: number
   behind: number
 }
@@ -27,6 +28,8 @@ export interface GitOpResult {
   ok: boolean
   changed: boolean
   message: string
+  /** push 被拒且 rebase 冲突,需要用户二选一 */
+  conflict?: boolean
 }
 
 export interface SearchHit {
@@ -51,5 +54,7 @@ export interface Backend {
   gitStatus(repoId: string): Promise<GitStatus>
   gitPull(repoId: string): Promise<GitOpResult>
   gitSync(repoId: string, message?: string): Promise<GitOpResult>
+  /** 冲突解决:local=以本地为准,remote=以远端为准 */
+  gitResolve(repoId: string, strategy: 'local' | 'remote'): Promise<GitOpResult>
   search(repoId: string, query: string): Promise<SearchHit[]>
 }

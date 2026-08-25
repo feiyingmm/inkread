@@ -21,7 +21,11 @@ function run(repoPath: string, args: string[]): Promise<{ code: number; stdout: 
 export async function gitStatus(repoPath: string) {
   const branch = (await run(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim() || '(无分支)'
   const porcelain = await run(repoPath, ['status', '--porcelain', '-z'])
-  const dirtyCount = porcelain.stdout.split('\0').filter((s) => s.trim().length > 0).length
+  const entries = porcelain.stdout.split('\0').filter((s) => s.trim().length > 0)
+  const dirtyFiles = entries.slice(0, 8).map((s) => {
+    const p = s.slice(3)
+    return p.slice(p.lastIndexOf('/') + 1)
+  })
   let ahead = 0
   let behind = 0
   const lr = await run(repoPath, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'])
@@ -30,7 +34,7 @@ export async function gitStatus(repoPath: string) {
     ahead = Number(m[0] ?? 0)
     behind = Number(m[1] ?? 0)
   }
-  return { branch, dirtyCount, ahead, behind }
+  return { branch, dirtyCount: entries.length, dirtyFiles, ahead, behind }
 }
 
 export async function gitPull(repoPath: string) {
@@ -57,10 +61,31 @@ export async function gitSync(repoPath: string, message: string) {
     const rb = await run(repoPath, ['pull', '--rebase'])
     if (rb.code !== 0) {
       await run(repoPath, ['rebase', '--abort'])
-      return { ok: false, changed: false, message: '存在冲突,请选择保留方式:' + (rb.stderr || rb.stdout).trim().slice(0, 300) }
+      return {
+        ok: false,
+        changed: false,
+        conflict: true,
+        message: '本地与远端存在冲突,请选择保留方式',
+      }
     }
     p = await run(repoPath, ['push'])
     if (p.code !== 0) return { ok: false, changed: false, message: (p.stderr || p.stdout).trim().slice(0, 500) }
   }
   return { ok: true, changed: true, message: '已提交并推送' }
+}
+
+/**
+ * 冲突解决后重推。
+ * 注意 rebase 语义:被重放的本地提交是 theirs —— 保留本地 = -X theirs,保留远端 = -X ours。
+ */
+export async function gitResolve(repoPath: string, strategy: 'local' | 'remote') {
+  const opt = strategy === 'local' ? 'theirs' : 'ours'
+  const rb = await run(repoPath, ['pull', '--rebase', '-X', opt])
+  if (rb.code !== 0) {
+    await run(repoPath, ['rebase', '--abort'])
+    return { ok: false, changed: false, message: '自动解决失败:' + (rb.stderr || rb.stdout).trim().slice(0, 300) }
+  }
+  const p = await run(repoPath, ['push'])
+  if (p.code !== 0) return { ok: false, changed: false, message: (p.stderr || p.stdout).trim().slice(0, 500) }
+  return { ok: true, changed: true, message: strategy === 'local' ? '已按本地版本推送' : '已按远端版本合并推送' }
 }

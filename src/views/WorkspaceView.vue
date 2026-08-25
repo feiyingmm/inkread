@@ -21,11 +21,12 @@
         <TopBar
           :repo-name="repo.currentRepoId"
           :path="currentPath"
-          :status="repo.status"
           :pulling="repo.pulling"
           :toc-open="tocOpen"
           :can-back="canBack"
           :can-forward="canForward"
+          :can-edit="canEdit"
+          :edit-mode="editMode"
           @toggle-side="sideOpen = !sideOpen"
           @toggle-toc="tocOpen = !tocOpen"
           @pull="doPull"
@@ -33,6 +34,7 @@
           @back="router.back()"
           @forward="router.forward()"
           @open-palette="openPalette('files')"
+          @set-edit="setEdit"
         />
         <div v-if="!currentPath" class="welcome">
           <div class="big">墨阅</div>
@@ -40,7 +42,7 @@
           <div class="sub" style="opacity: 0.7">从左侧文库选择一篇文档开始</div>
         </div>
         <MarkdownView
-          v-else
+          v-else-if="!editMode"
           ref="mdView"
           :repo-id="repo.currentRepoId"
           :path="currentPath"
@@ -49,6 +51,14 @@
           @open="onOpenLink"
           @rendered="onRendered"
         />
+        <EditorView
+          v-else
+          ref="editorRef"
+          :repo-id="repo.currentRepoId"
+          :path="currentPath"
+          @saved="onEditorSaved"
+        />
+        <StatusBar :status="repo.status" :syncing="syncing" :edit-mode="editMode" @sync="doSync" />
       </main>
 
       <TocPanel :items="toc" :active-slug="activeSlug" :open="tocOpen && toc.length > 0" @jump="onTocJump" />
@@ -63,6 +73,7 @@
       @close="paletteOpen = false"
       @open="onPaletteOpen"
     />
+    <ConflictDialog v-if="conflictOpen" @resolve="doResolve" @cancel="conflictOpen = false" />
   </div>
 </template>
 
@@ -75,6 +86,10 @@ import TocPanel from '@/components/TocPanel.vue'
 import MarkdownView from '@/components/MarkdownView.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import Palette from '@/components/Palette.vue'
+import EditorView from '@/components/EditorView.vue'
+import StatusBar from '@/components/StatusBar.vue'
+import ConflictDialog from '@/components/ConflictDialog.vue'
+import { backend } from '@/core/backend'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
 import { dirOf, fileKind } from '@/core/paths'
@@ -98,10 +113,67 @@ const canForward = ref(false)
 const toc = ref<TocItem[]>([])
 const activeSlug = ref('')
 const mdView = ref<InstanceType<typeof MarkdownView> | null>(null)
+const editorRef = ref<InstanceType<typeof EditorView> | null>(null)
+const editMode = ref(false)
+const syncing = ref(false)
+const conflictOpen = ref(false)
 let pendingAnchor = ''
 let pendingHighlight = ''
 
 const currentPath = computed(() => String(route.query.f ?? ''))
+const canEdit = computed(() => fileKind(currentPath.value) === 'markdown')
+
+function setEdit(on: boolean): void {
+  if (on) {
+    if (canEdit.value) editMode.value = true
+    return
+  }
+  if (editMode.value && editorRef.value?.isDirty()) {
+    if (!window.confirm('有未保存的修改,放弃并返回阅读视图?')) return
+  }
+  editMode.value = false
+}
+
+function onEditorSaved(): void {
+  repo.refreshStatus()
+}
+
+async function doSync(): Promise<void> {
+  if (syncing.value) return
+  syncing.value = true
+  try {
+    const files = repo.status?.dirtyFiles ?? []
+    const msg = files.length
+      ? `docs: 更新 ${files.slice(0, 3).join('、')}${files.length > 3 ? ` 等 ${repo.status?.dirtyCount ?? files.length} 处` : ''}`
+      : 'docs: 更新文档'
+    const r = await backend.gitSync(repo.currentRepoId, msg)
+    if (r.conflict) {
+      conflictOpen.value = true
+    } else {
+      toast(r.message, !r.ok)
+    }
+  } catch (e) {
+    toast(`同步失败:${(e as Error).message}`, true)
+  } finally {
+    syncing.value = false
+    repo.refreshStatus()
+  }
+}
+
+async function doResolve(strategy: 'local' | 'remote'): Promise<void> {
+  conflictOpen.value = false
+  syncing.value = true
+  try {
+    const r = await backend.gitResolve(repo.currentRepoId, strategy)
+    toast(r.message, !r.ok)
+    if (r.ok && strategy === 'remote') await repo.refresh()
+  } catch (e) {
+    toast(`处理失败:${(e as Error).message}`, true)
+  } finally {
+    syncing.value = false
+    repo.refreshStatus()
+  }
+}
 
 watch(
   () => route.fullPath,
@@ -134,6 +206,10 @@ watch(sideOpen, (v) => localStorage.setItem('inkread:side', v ? '1' : '0'))
 watch(tocOpen, (v) => localStorage.setItem('inkread:toc', v ? '1' : '0'))
 
 function openFile(path: string, anchor?: string): void {
+  if (editMode.value) {
+    if (editorRef.value?.isDirty() && !window.confirm('有未保存的修改,放弃并打开其他文档?')) return
+    editMode.value = false
+  }
   pendingAnchor = anchor ?? ''
   if (path === currentPath.value) {
     if (pendingAnchor) {
@@ -195,6 +271,14 @@ function onKeydown(e: KeyboardEvent): void {
   } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === 'f') {
     e.preventDefault()
     openPalette('search')
+  } else if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 'e') {
+    e.preventDefault()
+    if (canEdit.value) setEdit(!editMode.value)
+  } else if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 's') {
+    if (editMode.value) {
+      e.preventDefault()
+      void editorRef.value?.save()
+    }
   } else if (e.altKey && e.key === 'ArrowLeft') {
     e.preventDefault()
     router.back()

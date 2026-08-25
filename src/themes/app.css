@@ -251,23 +251,74 @@ button {
   }
 }
 
-.git-badge {
+.seg-group {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-deep);
+  overflow: hidden;
+}
+.seg-group button {
+  border: none;
+  background: transparent;
+  color: var(--t2);
+  font-size: 12.5px;
+  height: 28px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+.seg-group button.is-on {
+  background: var(--sel-bg);
+  color: var(--sel-fg);
+}
+
+/* ---------- 底部状态条 ---------- */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-side);
   font-size: 12px;
+  color: var(--t3);
+  flex-shrink: 0;
+  min-height: 32px;
+}
+.sb-item {
   white-space: nowrap;
 }
-.git-badge .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #e0a03c;
+.sb-branch {
+  color: var(--t2);
+}
+.sb-dirty {
+  color: #c08a2e;
+}
+.sb-clean {
+  color: var(--t3);
+}
+.sb-hint {
+  color: var(--t3);
+}
+.sb-flex {
+  flex: 1;
+}
+.sb-sync {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  height: 24px;
+  padding: 0 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.sb-sync:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+.sb-sync:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* 滚动内容区 */
