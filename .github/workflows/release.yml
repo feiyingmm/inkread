@@ -82,4 +82,8 @@ jobs:
       - name: Upload APK to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" Inkread_*_arm64.apk --clobber
+        # windows job 的 tauri-action 负责创建 Release;android 可能先到终点,须兜底创建避免竞态
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "墨阅 $GITHUB_REF_NAME" --notes "自动构建。Windows 安装包与 Android APK(arm64)见 Assets。"
+          gh release upload "$GITHUB_REF_NAME" Inkread_*_arm64.apk --clobber
