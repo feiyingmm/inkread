@@ -27,6 +27,51 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: '墨阅 ${{ github.ref_name }}'
-          releaseBody: '自动构建。Windows 安装包见下方 Assets(NSIS setup.exe)。'
+          releaseBody: '自动构建。Windows 安装包(NSIS setup.exe)与 Android APK(arm64)见下方 Assets。'
           releaseDraft: false
           prerelease: false
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Init android project
+        run: npx tauri android init
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+      - name: Apply brand icons
+        run: cp -r src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
+      - name: Build APK (arm64, unsigned)
+        run: npx tauri android build --apk --target aarch64
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+      - name: Sign APK
+        run: |
+          KS=/tmp/inkread.keystore
+          echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > "$KS"
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          APK=$(find src-tauri/gen/android/app/build/outputs/apk -name '*-release-unsigned.apk' | head -1)
+          echo "unsigned: $APK"
+          "$BT/zipalign" -f 4 "$APK" /tmp/aligned.apk
+          "$BT/apksigner" sign --ks "$KS" --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
+            --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASS }}" \
+            --out "Inkread_${GITHUB_REF_NAME#v}_arm64.apk" /tmp/aligned.apk
+      - name: Upload APK to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" Inkread_*_arm64.apk --clobber

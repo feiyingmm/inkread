@@ -108,7 +108,7 @@ const router = useRouter()
 const repo = useRepoStore()
 const settings = useSettings()
 
-const sideOpen = ref(localStorage.getItem('inkread:side') !== '0')
+const sideOpen = ref(window.matchMedia('(max-width: 900px)').matches ? false : localStorage.getItem('inkread:side') !== '0')
 const tocOpen = ref(localStorage.getItem('inkread:toc') !== '0')
 const settingsOpen = ref(false)
 const paletteOpen = ref(false)
@@ -125,8 +125,12 @@ const conflictOpen = ref(false)
 let pendingAnchor = ''
 let pendingHighlight = ''
 
+const isAndroid = /android/i.test(navigator.userAgent)
+const isNarrow = window.matchMedia('(max-width: 900px)').matches
+
 const currentPath = computed(() => String(route.query.f ?? ''))
-const canEdit = computed(() => fileKind(currentPath.value) === 'markdown')
+// 手机端纯阅读:Android 上不提供编辑入口
+const canEdit = computed(() => fileKind(currentPath.value) === 'markdown' && !isAndroid)
 
 function setEdit(on: boolean): void {
   if (on) {
@@ -228,6 +232,7 @@ function openFile(path: string, anchor?: string): void {
     editMode.value = false
   }
   pendingAnchor = anchor ?? ''
+  if (isNarrow) sideOpen.value = false
   if (path === currentPath.value) {
     if (pendingAnchor) {
       mdView.value?.scrollToSlug(pendingAnchor)

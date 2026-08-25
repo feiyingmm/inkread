@@ -643,12 +643,38 @@ button {
   }
 }
 
-/* 窄窗口(为 M5 移动端铺路):TOC 隐藏,侧栏浮层化交给后续里程碑 */
+/* 窄窗口 / 手机:侧栏浮层化,TOC 隐藏 */
 @media (max-width: 900px) {
   .shell {
     padding: 10px;
   }
+  .card {
+    position: relative;
+  }
+  .side {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 30;
+    width: min(280px, 82vw);
+    box-shadow: 8px 0 30px rgba(8, 18, 30, 0.25);
+  }
+  .side.is-closed {
+    width: min(280px, 82vw);
+    transform: translateX(-105%);
+    box-shadow: none;
+  }
   .toc {
     display: none;
+  }
+  .prose-wrap {
+    padding: 20px 18px 70px;
+  }
+  .topbar {
+    padding: 8px 10px;
+  }
+  .crumbs {
+    font-size: 12px;
   }
 }
