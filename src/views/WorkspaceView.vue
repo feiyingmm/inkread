@@ -46,9 +46,9 @@
         <div class="side-foot">
           <button
             class="tbtn"
-            title="拉取最新 (git pull);右键/长按更多选项"
+            title="刷新文件列表;右键/长按:git 拉取选项"
             :disabled="repo.pulling"
-            @click="doPull"
+            @click="refreshLocal"
             @contextmenu.prevent="pullMenu = { x: $event.clientX, y: $event.clientY }"
           >
             <Icon name="refresh" :spin="repo.pulling" />
@@ -442,6 +442,22 @@ const pullMenuStyle = computed(() => {
   const y = Math.min(pullMenu.value.y, window.innerHeight - 150)
   return { left: `${x}px`, top: `${y}px` }
 })
+
+/** 刷新按钮默认动作:重读本地文件列表与 git 状态(git 拉取在右键/长按菜单) */
+async function refreshLocal(): Promise<void> {
+  await repo.refresh()
+  toast('文件列表已刷新')
+}
+
+// 外部改动感知:窗口/App 回到前台自动刷新文件树与状态(4 秒节流)
+let lastAutoRefresh = 0
+function onFocusRefresh(): void {
+  if (document.visibilityState !== 'visible' || !repo.currentRepoId) return
+  const now = Date.now()
+  if (now - lastAutoRefresh < 4000) return
+  lastAutoRefresh = now
+  void repo.refresh()
+}
 
 function onForcePull(): void {
   pullMenu.value = null
@@ -931,6 +947,8 @@ async function setupTauriFileOpen(): Promise<void> {
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('focus', onFocusRefresh)
+  document.addEventListener('visibilitychange', onFocusRefresh)
   await repo.init()
   if (!currentPath.value) {
     openDefaultDoc()
@@ -947,5 +965,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('focus', onFocusRefresh)
+  document.removeEventListener('visibilitychange', onFocusRefresh)
 })
 </script>

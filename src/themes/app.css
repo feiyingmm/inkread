@@ -1037,6 +1037,14 @@ button {
 
 /* ---------- 打印(另存 PDF) ---------- */
 @media print {
+  /* height:100% + overflow hidden 会让打印被截成一页,必须全部放开 */
+  html,
+  body,
+  #app {
+    height: auto;
+    max-width: none;
+    overflow: visible;
+  }
   .shell {
     padding: 0;
     background: none;
@@ -1062,6 +1070,9 @@ button {
   .fold-btn,
   .code-copy {
     display: none !important;
+  }
+  .main {
+    overflow: visible;
   }
   .content {
     overflow: visible;

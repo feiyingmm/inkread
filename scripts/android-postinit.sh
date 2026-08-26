@@ -23,3 +23,11 @@ if [ -d src-tauri/icons/android ]; then
   cp -r src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
   echo "已应用品牌图标"
 fi
+
+# BuildTask 的 CLI runner:init 时若经 `node tauri.js` 启动会被记成 node 绝对路径,
+# 导致 gradle 执行 `node tauri ...` 失败;统一改为 npx(gradle 会自动尝试 npx.cmd)
+BT=$(ls src-tauri/gen/android/buildSrc/src/main/java/*/*/*/kotlin/BuildTask.kt 2>/dev/null | head -1)
+if [ -n "$BT" ] && grep -q 'nodejs..node"""' "$BT"; then
+  sed -i 's#val executable = """.*nodejs.node"""#val executable = """npx"""#' "$BT"
+  echo "已修正 BuildTask runner 为 npx"
+fi
