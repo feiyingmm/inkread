@@ -4,17 +4,24 @@
       <h3>本地变更({{ changes.length }})</h3>
       <div class="changes-body">
         <div v-if="changes.length === 0" class="palette-empty">工作区干净,没有未提交的修改</div>
-        <button
-          v-for="c in changes"
-          :key="c.path"
-          class="change-row"
-          :disabled="c.kind === 'deleted'"
-          :title="c.kind === 'deleted' ? '文件已删除' : '打开查看'"
-          @click="emit('open', c.path)"
-        >
-          <span class="chg-badge" :class="`chg--${c.kind}`">{{ KIND_LABEL[c.kind] }}</span>
-          <span class="chg-path">{{ c.path }}</span>
-        </button>
+        <div v-for="c in changes" :key="c.path" class="change-row">
+          <button
+            class="chg-main"
+            :disabled="c.kind === 'deleted'"
+            :title="c.kind === 'deleted' ? '文件已删除' : '打开查看'"
+            @click="emit('open', c.path)"
+          >
+            <span class="chg-badge" :class="`chg--${c.kind}`">{{ KIND_LABEL[c.kind] }}</span>
+            <span class="chg-path">{{ c.path }}</span>
+          </button>
+          <button
+            class="chg-undo"
+            :title="c.kind === 'untracked' ? '撤销:删除该新增文件' : '撤销修改,恢复到最近提交版本'"
+            @click="emit('discard', c)"
+          >
+            <Icon name="undo" :size="15" />
+          </button>
+        </div>
       </div>
       <div class="changes-foot">
         <span class="chg-hint">「提交并推送」会包含以上全部变更</span>
@@ -28,6 +35,7 @@
 
 <script setup lang="ts">
 import type { GitChange, GitChangeKind } from '@/core/backend'
+import Icon from '@/components/Icon.vue'
 
 defineProps<{
   changes: GitChange[]
@@ -38,6 +46,7 @@ const emit = defineEmits<{
   close: []
   open: [path: string]
   sync: []
+  discard: [change: GitChange]
 }>()
 
 const KIND_LABEL: Record<GitChangeKind, string> = {
@@ -78,21 +87,46 @@ const KIND_LABEL: Record<GitChangeKind, string> = {
 .change-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   width: 100%;
+  border-radius: var(--radius-sm);
+}
+.change-row:hover {
+  background: var(--bg-hover);
+}
+.chg-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: none;
   background: none;
   text-align: left;
   padding: 7px 10px;
-  border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.change-row:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.change-row:disabled {
+.chg-main:disabled {
   cursor: default;
   opacity: 0.7;
+}
+.chg-undo {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--t3);
+  cursor: pointer;
+}
+.chg-undo:hover {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
 }
 .chg-badge {
   flex-shrink: 0;
@@ -172,8 +206,12 @@ const KIND_LABEL: Record<GitChangeKind, string> = {
     font-size: 17px;
     text-align: center;
   }
-  .change-row {
+  .chg-main {
     padding: 11px 10px;
+  }
+  .chg-undo {
+    width: 40px;
+    height: 40px;
   }
   .changes-foot {
     padding-bottom: calc(10px + var(--safe-bottom));

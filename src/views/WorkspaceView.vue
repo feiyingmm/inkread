@@ -37,20 +37,20 @@
             </div>
           </template>
         </div>
-        <div class="side-body">
+        <div class="side-body" @contextmenu="onBlankMenu">
           <div v-if="repo.error" class="tree-empty">{{ repo.error }}</div>
           <div v-else-if="repo.loading" class="tree-empty">加载中…</div>
-          <div v-else-if="repo.tree.length === 0" class="tree-empty">仓库为空</div>
+          <div v-else-if="repo.tree.length === 0" class="tree-empty">仓库为空<br /><span class="tree-empty-sub">右键 / 长按空白处可新建</span></div>
           <FileTree v-else :nodes="repo.tree" :current="currentPath" :reveal="treeReveal" @open="onOpenNode" @menu="onTreeMenu" />
         </div>
         <div class="side-foot">
-          <button class="tbtn" title="新建文档" :disabled="!repo.currentRepoId" @click="startCreate('file', dirOf(currentPath))">
-            <Icon name="doc-plus" />
-          </button>
-          <button class="tbtn" title="新建文件夹" :disabled="!repo.currentRepoId" @click="startCreate('dir', dirOf(currentPath))">
-            <Icon name="folder-plus" />
-          </button>
-          <button class="tbtn" title="拉取最新 (git pull)" :disabled="repo.pulling" @click="doPull">
+          <button
+            class="tbtn"
+            title="拉取最新 (git pull);右键/长按更多选项"
+            :disabled="repo.pulling"
+            @click="doPull"
+            @contextmenu.prevent="pullMenu = { x: $event.clientX, y: $event.clientY }"
+          >
             <Icon name="refresh" :spin="repo.pulling" />
           </button>
           <button class="tbtn" :title="modeTitle" @click="cycleMode">
@@ -173,7 +173,23 @@
       @close="changesOpen = false"
       @open="onOpenChange"
       @sync="doSync"
+      @discard="onDiscardFile"
     />
+
+    <!-- 拉取按钮右键/长按:更多同步选项 -->
+    <template v-if="pullMenu">
+      <div class="ctx-mask" @click="pullMenu = null" @contextmenu.prevent="pullMenu = null"></div>
+      <div class="ctx-menu" :style="pullMenuStyle">
+        <div class="ctx-title">同步选项</div>
+        <button class="repo-item" @click="pullMenu = null; doPull()">
+          <span class="ri-icon"><Icon name="refresh" :size="15" /></span>拉取最新 (git pull)
+        </button>
+        <div class="repo-menu-sep"></div>
+        <button class="repo-item ctx-danger" @click="onForcePull">
+          <span class="ri-icon"><Icon name="undo" :size="15" /></span>放弃本地修改,与远端一致…
+        </button>
+      </div>
+    </template>
 
     <button
       v-if="isNarrow && !editMode && currentPath && toc.length > 0"
@@ -192,28 +208,52 @@
       @close="tocSheetOpen = false"
     />
 
-    <!-- 文件树右键/长按菜单(桌面浮动,手机底部卡) -->
+    <!-- 文件树右键/长按菜单(桌面浮动,手机底部卡);空白处 = 根级新建 -->
     <template v-if="entryMenu">
       <div class="ctx-mask" @click="entryMenu = null" @contextmenu.prevent="entryMenu = null"></div>
       <div class="ctx-menu" :style="ctxStyle">
-        <div class="ctx-title">{{ entryMenu.node.name }}</div>
-        <template v-if="entryMenu.node.type === 'dir'">
-          <button class="repo-item" @click="startCreate('file', entryMenu.node.path)">
-            <span class="ri-icon"><Icon name="doc-plus" :size="15" /></span>在此新建文档…
+        <div class="ctx-title">{{ entryMenu.node ? entryMenu.node.name : '文库根目录' }}</div>
+        <template v-if="!entryMenu.node || entryMenu.node.type === 'dir'">
+          <button class="repo-item" @click="startCreate('file', entryMenu.node?.path ?? '')">
+            <span class="ri-icon"><Icon name="doc-plus" :size="15" /></span>新建文档…
           </button>
-          <button class="repo-item" @click="startCreate('dir', entryMenu.node.path)">
-            <span class="ri-icon"><Icon name="folder-plus" :size="15" /></span>在此新建文件夹…
-          </button>
-          <div class="repo-menu-sep"></div>
-          <button class="repo-item ctx-danger" @click="doDelete(entryMenu.node)">
-            <span class="ri-icon"><Icon name="trash" :size="15" /></span>删除文件夹…
+          <button class="repo-item" @click="startCreate('dir', entryMenu.node?.path ?? '')">
+            <span class="ri-icon"><Icon name="folder-plus" :size="15" /></span>新建文件夹…
           </button>
         </template>
-        <button v-else class="repo-item ctx-danger" @click="doDelete(entryMenu.node)">
-          <span class="ri-icon"><Icon name="trash" :size="15" /></span>删除文件…
-        </button>
+        <template v-if="entryMenu.node">
+          <div class="repo-menu-sep"></div>
+          <button class="repo-item" @click="startRename(entryMenu.node)">
+            <span class="ri-icon"><Icon name="rename" :size="15" /></span>重命名…
+          </button>
+          <button class="repo-item ctx-danger" @click="doDelete(entryMenu.node)">
+            <span class="ri-icon"><Icon name="trash" :size="15" /></span>{{ entryMenu.node.type === 'dir' ? '删除文件夹…' : '删除文件…' }}
+          </button>
+        </template>
       </div>
     </template>
+
+    <!-- 重命名 -->
+    <div v-if="renameDialog" class="mask mask--center mask--sheet" @click.self="renameDialog = null">
+      <div class="ne-card">
+        <h3>重命名</h3>
+        <div class="ne-dir" :title="renameDialog.node.path">{{ renameDialog.node.path }}</div>
+        <input
+          ref="renameNameEl"
+          v-model="renameName"
+          class="palette-input ne-input"
+          placeholder="新名称"
+          @keydown.enter="doRename"
+          @keydown.esc="renameDialog = null"
+        />
+        <div class="set-row" style="justify-content: flex-end; margin-top: 14px">
+          <button class="opt" @click="renameDialog = null">取消</button>
+          <button class="opt is-on" :disabled="!renameName.trim() || creating" @click="doRename">
+            {{ creating ? '处理中…' : '重命名' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 新建文档 / 文件夹 -->
     <div v-if="newDialog" class="mask mask--center mask--sheet" @click.self="newDialog = null">
@@ -262,7 +302,7 @@ import { useSettings } from '@/stores/settings'
 import { dirOf, fileKind } from '@/core/paths'
 import { resolvePath } from '@/core/paths'
 import type { TocItem } from '@/core/markdown/pipeline'
-import type { TreeNode } from '@/core/backend'
+import type { GitChange, TreeNode } from '@/core/backend'
 import { toast } from '@/core/toast'
 
 const route = useRoute()
@@ -331,23 +371,35 @@ function onCrumb(dirPath: string): void {
   treeReveal.value = dirPath
 }
 
-// ---- 文件管理:新建文档 / 新建文件夹 / 删除 ----
-const entryMenu = ref<null | { node: TreeNode; x: number; y: number }>(null)
+// ---- 文件管理:新建文档 / 新建文件夹 / 重命名 / 删除 ----
+// entryMenu.node = null 表示树空白处(文库根目录)
+const entryMenu = ref<null | { node: TreeNode | null; x: number; y: number }>(null)
 const newDialog = ref<null | { kind: 'file' | 'dir'; dir: string }>(null)
 const newName = ref('')
 const newNameEl = ref<HTMLInputElement | null>(null)
+const renameDialog = ref<null | { node: TreeNode }>(null)
+const renameName = ref('')
+const renameNameEl = ref<HTMLInputElement | null>(null)
 const creating = ref(false)
 
 /** 桌面浮动菜单跟随指针并防出界;手机由 CSS 固定为底部卡 */
 const ctxStyle = computed(() => {
   if (!entryMenu.value || isNarrow.value) return undefined
   const x = Math.min(entryMenu.value.x, window.innerWidth - 240)
-  const y = Math.min(entryMenu.value.y, window.innerHeight - 190)
+  const y = Math.min(entryMenu.value.y, window.innerHeight - 230)
   return { left: `${x}px`, top: `${y}px` }
 })
 
 function onTreeMenu(node: TreeNode, x: number, y: number): void {
   entryMenu.value = { node, x, y }
+}
+
+/** 树列表空白处右键/长按:根级新建(树行自身的菜单事件由 FileTree 发出) */
+function onBlankMenu(e: MouseEvent): void {
+  if ((e.target as HTMLElement).closest('.tree-row')) return
+  e.preventDefault()
+  if (!repo.currentRepoId) return
+  entryMenu.value = { node: null, x: e.clientX, y: e.clientY }
 }
 
 function startCreate(kind: 'file' | 'dir', dir: string): void {
@@ -373,6 +425,92 @@ async function doCreate(): Promise<void> {
     treeReveal.value = kind === 'file' ? dir : full
     if (kind === 'file') openFile(full)
     toast(kind === 'file' ? '文档已创建' : '文件夹已创建')
+    repo.refreshStatus()
+  } catch (e) {
+    toast(typeof e === 'string' ? e : (e as Error).message, true)
+  } finally {
+    creating.value = false
+  }
+}
+
+// ---- 同步选项菜单 / 单文件撤销 ----
+const pullMenu = ref<null | { x: number; y: number }>(null)
+
+const pullMenuStyle = computed(() => {
+  if (!pullMenu.value || isNarrow.value) return undefined
+  const x = Math.min(pullMenu.value.x, window.innerWidth - 250)
+  const y = Math.min(pullMenu.value.y, window.innerHeight - 150)
+  return { left: `${x}px`, top: `${y}px` }
+})
+
+function onForcePull(): void {
+  pullMenu.value = null
+  if (!window.confirm('放弃本仓库全部未推送的本地修改,强制与远端一致?此操作不可恢复(未跟踪的新文件保留)。')) return
+  void onDiscardLocal()
+}
+
+async function onDiscardFile(c: GitChange): Promise<void> {
+  const tip =
+    c.kind === 'untracked'
+      ? `撤销将删除新增文件「${c.path}」,不可恢复。继续?`
+      : `撤销「${c.path}」的本地修改,恢复到最近提交的版本?`
+  if (!window.confirm(tip)) return
+  try {
+    await backend.discardFile(repo.currentRepoId, c.path)
+    toast('已撤销')
+    await repo.refresh()
+    repo.refreshStatus()
+    if (currentPath.value === c.path) {
+      if (c.kind === 'untracked') await router.replace({ query: {} })
+      else mdView.value?.reload()
+    }
+  } catch (e) {
+    toast(typeof e === 'string' ? e : (e as Error).message, true)
+  }
+}
+
+function startRename(node: TreeNode): void {
+  entryMenu.value = null
+  renameDialog.value = { node }
+  renameName.value = node.name
+  void nextTick(() => {
+    const el = renameNameEl.value
+    if (!el) return
+    el.focus()
+    // 预选中主名部分(不含扩展名),回车即改
+    const dot = node.type === 'file' ? node.name.lastIndexOf('.') : -1
+    el.setSelectionRange(0, dot > 0 ? dot : node.name.length)
+  })
+}
+
+async function doRename(): Promise<void> {
+  if (!renameDialog.value || creating.value) return
+  const node = renameDialog.value.node
+  let name = renameName.value.trim().replace(/^[/\\]+|[/\\]+$/g, '')
+  if (!name || name === node.name) {
+    renameDialog.value = null
+    return
+  }
+  // 文件重命名漏掉扩展名时自动补回原扩展
+  if (node.type === 'file' && !/\.[a-z0-9]+$/i.test(name)) {
+    const dot = node.name.lastIndexOf('.')
+    if (dot > 0) name += node.name.slice(dot)
+  }
+  const dir = dirOf(node.path)
+  const to = dir ? `${dir}/${name}` : name
+  creating.value = true
+  try {
+    await backend.renameEntry(repo.currentRepoId, node.path, to)
+    renameDialog.value = null
+    toast('已重命名')
+    // 当前打开的文档受影响时跟随新路径
+    if (currentPath.value === node.path) {
+      await router.replace({ query: { ...route.query, f: to } })
+    } else if (node.type === 'dir' && currentPath.value.startsWith(node.path + '/')) {
+      await router.replace({ query: { ...route.query, f: to + currentPath.value.slice(node.path.length) } })
+    }
+    await repo.refresh()
+    treeReveal.value = to
     repo.refreshStatus()
   } catch (e) {
     toast(typeof e === 'string' ? e : (e as Error).message, true)

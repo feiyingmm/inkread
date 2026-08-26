@@ -83,6 +83,8 @@ const ICONS: Record<string, IconDef> = {
   trash: {
     paths: ['M3 6h18', 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6', 'M10 11v6', 'M14 11v6'],
   },
+  undo: { paths: ['M2 4v6h6', 'M4.5 15a9 9 0 1 0 2.13-9.36L2 10'] },
+  rename: { paths: ['M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z'] },
   'chevron-up': { paths: ['M6 15l6-6 6 6'] },
   'chevron-down': { paths: ['M6 9l6 6 6-6'] },
   'chevron-right': { paths: ['M9 6l6 6-6 6'] },

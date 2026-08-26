@@ -81,6 +81,10 @@ export interface Backend {
   createFile(repoId: string, path: string): Promise<void>
   /** 新建文件夹(内置 .gitkeep 占位,保证空目录能进 git 同步) */
   createDir(repoId: string, path: string): Promise<void>
+  /** 重命名文件或文件夹(仓库内移动) */
+  renameEntry(repoId: string, from: string, to: string): Promise<void>
   /** 删除文件或文件夹(文件夹递归删除,不可恢复) */
   deleteEntry(repoId: string, path: string): Promise<void>
+  /** 撤销单文件的本地修改(未跟踪文件=直接删除) */
+  discardFile(repoId: string, path: string): Promise<void>
 }

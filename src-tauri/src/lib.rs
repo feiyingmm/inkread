@@ -236,6 +236,24 @@ fn create_dir(app: AppHandle, repo_id: String, path: String) -> Result<(), Strin
     std::fs::write(abs.join(".gitkeep"), "").map_err(|e| e.to_string())
 }
 
+/// 重命名文件或文件夹(仓库内移动)
+#[tauri::command]
+fn rename_entry(app: AppHandle, repo_id: String, from: String, to: String) -> Result<(), String> {
+    let root = state::repo_path(&app, &repo_id)?;
+    let src = state::resolve_in_repo(&root, &from)?;
+    let dst = state::resolve_in_repo(&root, &to)?;
+    if !src.exists() {
+        return Err("源文件不存在".into());
+    }
+    if dst.exists() {
+        return Err("目标名称已存在".into());
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&src, &dst).map_err(|e| format!("重命名失败: {e}"))
+}
+
 /// 删除文件或文件夹(文件夹递归删除);不允许删仓库根
 #[tauri::command]
 fn delete_entry(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
@@ -284,6 +302,15 @@ fn git_sync(
 fn git_pull_force(app: AppHandle, repo_id: String) -> Result<gitops::GitOpResult, String> {
     let root = state::repo_path(&app, &repo_id)?;
     gitops::pull_force(&root, state::load_tokens(&app))
+}
+
+/// 撤销单个文件的本地修改(未跟踪文件=直接删除)
+#[tauri::command]
+fn git_discard_file(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
+    let root = state::repo_path(&app, &repo_id)?;
+    // 仅作路径越界校验
+    state::resolve_in_repo(&root, &path)?;
+    gitops::discard_file(&root, &path)
 }
 
 #[tauri::command]
@@ -579,10 +606,12 @@ pub fn run() {
             write_binary,
             create_file,
             create_dir,
+            rename_entry,
             delete_entry,
             git_status,
             git_pull,
             git_pull_force,
+            git_discard_file,
             git_sync,
             search_repo,
             save_token,

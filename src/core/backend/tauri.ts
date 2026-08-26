@@ -29,5 +29,7 @@ export const tauriBackend: Backend = {
   saveToken: (host, token) => invoke<void>('save_token', { host, token }),
   createFile: (repoId, path) => invoke<void>('create_file', { repoId, path }),
   createDir: (repoId, path) => invoke<void>('create_dir', { repoId, path }),
+  renameEntry: (repoId, from, to) => invoke<void>('rename_entry', { repoId, from, to }),
   deleteEntry: (repoId, path) => invoke<void>('delete_entry', { repoId, path }),
+  discardFile: (repoId, path) => invoke<void>('git_discard_file', { repoId, path }),
 }

@@ -309,6 +309,27 @@ pub fn sync(
     }
 }
 
+/// 撤销单文件的本地修改:tracked 文件恢复 HEAD 版本(含已暂存改动);未跟踪文件直接删除
+pub fn discard_file(path: &Path, rel: &str) -> Result<(), String> {
+    let repo = open(path)?;
+    let st = repo
+        .status_file(Path::new(rel))
+        .map_err(|e| format!("读取文件状态失败: {}", e.message()))?;
+    if st.contains(git2::Status::WT_NEW) {
+        let abs = path.join(rel);
+        if abs.is_dir() {
+            std::fs::remove_dir_all(&abs).map_err(|e| e.to_string())?;
+        } else {
+            std::fs::remove_file(&abs).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    let mut cb = CheckoutBuilder::new();
+    cb.path(rel).force().update_index(true);
+    repo.checkout_head(Some(&mut cb))
+        .map_err(|e| format!("撤销失败: {}", e.message()))
+}
+
 /// 克隆远程仓库到指定目录
 pub fn clone(
     url: &str,

@@ -109,14 +109,32 @@ onMounted(async () => {
         hljs: { lineNumber: false },
         math: { engine: 'KaTeX' },
       },
-      toolbar: [
-        'headings', 'bold', 'italic', 'strike', 'link', '|',
-        'list', 'ordered-list', 'check', '|',
-        'quote', 'code', 'inline-code', 'table', '|',
-        'undo', 'redo', 'outline', '|',
-        // 即时渲染下代码块需点进代码区才能编辑;切到「分屏预览」可直接改源码
-        'edit-mode',
-      ],
+      // Typora 式纯所见即所得:不显示富文本工具栏,全部经 Markdown 语法与「/」命令输入
+      toolbar: [],
+      toolbarConfig: { hide: true },
+      // 输入「/」唤起块插入菜单(代码块 /json /sql、表格、任务列表等,语雀/Typora 同款习惯)
+      hint: {
+        delay: 120,
+        extend: [
+          {
+            key: '/',
+            hint: (value: string) => {
+              const langs = ['json', 'sql', 'java', 'javascript', 'typescript', 'python', 'bash', 'yaml', 'xml', 'html', 'css']
+              const items = [
+                ...langs.map((l) => ({ value: '```' + l + '\n\n```', html: `代码块 · ${l}` })),
+                { value: '```\n\n```', html: '代码块 · 纯文本' },
+                { value: '| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n|  |  |  |', html: '表格' },
+                { value: '- [ ] ', html: '任务列表' },
+                { value: '> ', html: '引用' },
+                { value: '---\n', html: '分割线' },
+                { value: '$$\n\n$$', html: '数学公式块' },
+              ]
+              const q = value.toLowerCase()
+              return items.filter((i) => !q || i.html.toLowerCase().includes(q) || i.value.toLowerCase().includes(q)).slice(0, 10)
+            },
+          },
+        ],
+      },
       counter: { enable: false },
       upload: {
         accept: 'image/*',
@@ -178,10 +196,12 @@ defineExpose({ save, isDirty })
   border: none;
   border-radius: 0;
 }
+/* Typora 式:无富文本工具栏(toolbarConfig.hide 在部分版本不生效,CSS 兜底) */
 :deep(.vditor-toolbar) {
-  background: var(--bg-side);
-  border-bottom: 1px solid var(--line);
-  padding-left: 18px !important;
+  display: none !important;
+}
+:deep(.vditor-content) {
+  height: 100%;
 }
 :deep(.vditor-ir .vditor-reset) {
   font-size: var(--prose-size);

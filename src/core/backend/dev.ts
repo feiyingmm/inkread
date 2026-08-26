@@ -46,5 +46,7 @@ export const devBackend: Backend = {
     Promise.reject(new Error('开发模式凭据走系统 git,无需配置令牌')),
   createFile: (repo, path) => post<void>(`/api/create-file?repo=${enc(repo)}&path=${enc(path)}`),
   createDir: (repo, path) => post<void>(`/api/create-dir?repo=${enc(repo)}&path=${enc(path)}`),
+  renameEntry: (repo, from, to) => post<void>(`/api/rename?repo=${enc(repo)}&path=${enc(from)}&to=${enc(to)}`),
   deleteEntry: (repo, path) => post<void>(`/api/delete?repo=${enc(repo)}&path=${enc(path)}`),
+  discardFile: (repo, path) => post<void>(`/api/discard-file?repo=${enc(repo)}&path=${enc(path)}`),
 }

@@ -285,6 +285,30 @@ export function inkreadDevServer(): Plugin {
               else await fsp.unlink(abs)
               return json(res, { ok: true })
             }
+            case '/rename': {
+              const to = url.searchParams.get('to') ?? ''
+              if (!relPath.trim() || !to.trim()) return json(res, { error: '路径为空' }, 400)
+              const src = resolveInRepo(repo, relPath)
+              const dst = resolveInRepo(repo, to)
+              if (!fs.existsSync(src)) return json(res, { error: '源文件不存在' }, 404)
+              if (fs.existsSync(dst)) return json(res, { error: '目标名称已存在' }, 409)
+              await fsp.mkdir(path.dirname(dst), { recursive: true })
+              await fsp.rename(src, dst)
+              return json(res, { ok: true })
+            }
+            case '/discard-file': {
+              if (!relPath.trim()) return json(res, { error: '路径为空' }, 400)
+              resolveInRepo(repo, relPath) // 越界校验
+              // 未跟踪文件 = 删除;tracked = 恢复 HEAD 版本(含已暂存改动)
+              const st = await run(repo.path, ['status', '--porcelain', '--', relPath])
+              if (st.stdout.startsWith('??')) {
+                await fsp.rm(resolveInRepo(repo, relPath), { recursive: true, force: true })
+              } else {
+                const r = await run(repo.path, ['checkout', 'HEAD', '--', relPath])
+                if (r.code !== 0) return json(res, { error: r.stderr || '撤销失败' }, 500)
+              }
+              return json(res, { ok: true })
+            }
             default:
               next()
           }
