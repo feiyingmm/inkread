@@ -270,6 +270,26 @@ fn check_storage_access() -> bool {
     }
 }
 
+/// Android:沉浸式全屏——隐藏/恢复系统状态栏与导航栏(阅读时点正文空白切换)
+#[tauri::command]
+fn set_immersive(window: tauri::WebviewWindow, on: bool) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        window
+            .with_webview(move |webview| {
+                webview.jni_handle().exec(move |env, activity, _webview| {
+                    let _ = android_jni::set_immersive_mode(env, activity, on);
+                });
+            })
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (window, on);
+        Ok(())
+    }
+}
+
 /// Android:拉起「所有文件访问」系统授权页(API<30 无此页时回退应用详情页)
 #[tauri::command]
 fn request_storage_access(window: tauri::WebviewWindow) -> Result<(), String> {
@@ -361,6 +381,22 @@ mod android_jni {
         ] {
             env.call_method(&settings, name, "(Z)V", &[JValue::Bool(v as u8)])?;
         }
+        Ok(())
+    }
+
+    /// 沉浸式全屏:IMMERSIVE_STICKY 下用户从屏幕边缘上/下滑可短暂呼出系统栏,随后自动再隐藏。
+    /// setSystemUiVisibility 虽已 deprecated,但在本项目 targetSdk(34)全版本运行时有效,单次调用最简单
+    pub fn set_immersive_mode(env: &mut JNIEnv, activity: &JObject, on: bool) -> Result<(), jni::errors::Error> {
+        // LAYOUT_STABLE 0x100 | LAYOUT_HIDE_NAVIGATION 0x200 | LAYOUT_FULLSCREEN 0x400
+        // | HIDE_NAVIGATION 0x2 | FULLSCREEN 0x4 | IMMERSIVE_STICKY 0x1000
+        let flags: i32 = if on { 0x100 | 0x200 | 0x400 | 0x2 | 0x4 | 0x1000 } else { 0 };
+        let window = env
+            .call_method(activity, "getWindow", "()Landroid/view/Window;", &[])?
+            .l()?;
+        let decor = env
+            .call_method(&window, "getDecorView", "()Landroid/view/View;", &[])?
+            .l()?;
+        env.call_method(&decor, "setSystemUiVisibility", "(I)V", &[JValue::Int(flags)])?;
         Ok(())
     }
 
@@ -507,6 +543,7 @@ pub fn run() {
             export_file,
             check_storage_access,
             request_storage_access,
+            set_immersive,
             list_dirs,
             open_path,
             take_launch_file

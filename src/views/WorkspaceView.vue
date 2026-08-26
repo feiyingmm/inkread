@@ -264,6 +264,17 @@ function onTapBlank(): void {
   chromeHidden.value = !chromeHidden.value
 }
 
+// 沉浸阅读联动:Android 系统状态栏/导航栏随软件菜单一起隐现,顶部让位同步收起
+watch(chromeHidden, (hidden) => {
+  if (hidden) document.documentElement.dataset.immersive = '1'
+  else delete document.documentElement.dataset.immersive
+  if (isTauri && isAndroid) {
+    void import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke('set_immersive', { on: hidden }))
+      .catch(() => {})
+  }
+})
+
 function onCrumb(dirPath: string): void {
   sideOpen.value = true
   treeReveal.value = dirPath

@@ -71,7 +71,7 @@ button {
   height: 100%;
   padding: 22px 26px;
   background: linear-gradient(135deg, var(--g1) 0%, var(--g2) 52%, var(--g3) 100%);
-  transition: background 0.4s ease;
+  transition: background 0.4s ease, padding 0.28s ease;
 }
 
 .card {
@@ -1192,6 +1192,14 @@ button {
   }
   :root[data-android='1'] .card {
     border-radius: 14px 14px 0 0;
+    transition: border-radius 0.28s ease;
+  }
+  /* 沉浸阅读:系统状态栏已由原生隐藏,顶部让位与圆角一并收起,正文占满整屏 */
+  :root[data-android='1'][data-immersive='1'] .shell {
+    padding-top: 0;
+  }
+  :root[data-android='1'][data-immersive='1'] .card {
+    border-radius: 0;
   }
   .tbtn {
     height: 44px;
