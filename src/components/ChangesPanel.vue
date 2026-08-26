@@ -1,5 +1,5 @@
 <template>
-  <div class="mask mask--center" @click.self="emit('close')">
+  <div class="mask mask--center mask--sheet" @click.self="emit('close')">
     <div class="changes-card">
       <h3>本地变更({{ changes.length }})</h3>
       <div class="changes-body">
@@ -160,12 +160,23 @@ const KIND_LABEL: Record<GitChangeKind, string> = {
 }
 @media (max-width: 900px) {
   .changes-card {
-    margin-top: 16px;
-    width: calc(100vw - 24px);
-    max-height: calc(100dvh - var(--safe-top) - 90px);
+    margin: 0;
+    width: 100vw;
+    max-height: calc(100dvh - var(--safe-top) - 60px);
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
+    animation: sheet-up 0.22s ease;
+  }
+  .changes-card h3 {
+    font-size: 17px;
+    text-align: center;
   }
   .change-row {
-    padding: 10px;
+    padding: 11px 10px;
+  }
+  .changes-foot {
+    padding-bottom: calc(10px + var(--safe-bottom));
   }
 }
 </style>

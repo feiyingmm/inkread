@@ -1,5 +1,5 @@
 <template>
-  <div class="mask mask--center" @click.self="emit('close')">
+  <div class="mask mask--center mask--sheet" @click.self="emit('close')">
     <div class="conflict">
       <h3>{{ mode === 'pull' ? '拉取失败' : '推送失败' }}</h3>
       <p v-if="mode === 'pull'">
@@ -81,8 +81,17 @@ const emit = defineEmits<{
 }
 @media (max-width: 900px) {
   .conflict {
-    margin-top: 16px;
-    width: calc(100vw - 24px);
+    margin: 0;
+    width: 100vw;
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
+    padding: 20px 18px calc(18px + var(--safe-bottom));
+    animation: sheet-up 0.22s ease;
+  }
+  .conflict h3 {
+    font-size: 17px;
+    text-align: center;
   }
 }
 </style>

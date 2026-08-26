@@ -1,5 +1,5 @@
 <template>
-  <div class="mask mask--center" @click.self="!cloning && emit('close')">
+  <div class="mask mask--center mask--sheet" @click.self="!cloning && emit('close')">
     <div class="clone-card">
       <h3>克隆远程仓库</h3>
       <div class="set-group">
@@ -64,8 +64,17 @@ async function doClone(): Promise<void> {
 }
 @media (max-width: 900px) {
   .clone-card {
-    margin-top: 16px;
-    width: calc(100vw - 24px);
+    margin: 0;
+    width: 100vw;
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
+    padding: 20px 18px calc(20px + var(--safe-bottom));
+    animation: sheet-up 0.22s ease;
+  }
+  .clone-card h3 {
+    font-size: 17px;
+    text-align: center;
   }
 }
 </style>

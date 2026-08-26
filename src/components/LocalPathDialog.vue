@@ -1,5 +1,5 @@
 <template>
-  <div class="mask mask--center" @click.self="!busy && emit('close')">
+  <div class="mask mask--center mask--sheet" @click.self="!busy && emit('close')">
     <div class="clone-card">
       <h3>添加本地仓库</h3>
 
@@ -314,9 +314,20 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 900px) {
   .clone-card {
-    margin-top: 16px;
-    width: calc(100vw - 24px);
-    padding: 18px 16px;
+    margin: 0;
+    width: 100vw;
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
+    padding: 20px 16px calc(18px + var(--safe-bottom));
+    animation: sheet-up 0.22s ease;
+  }
+  .clone-card h3 {
+    font-size: 17px;
+    text-align: center;
+  }
+  .browse-list {
+    height: min(340px, 46dvh);
   }
   .browse-row {
     padding: 12px 10px;

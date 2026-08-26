@@ -218,39 +218,6 @@ button {
   margin: 6px 4px;
 }
 
-.set-hint {
-  font-size: 11.5px;
-  color: var(--t3);
-  line-height: 1.6;
-  margin-top: 8px;
-}
-
-/* 设置面板内的帮助折叠区 */
-.help-fold {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-.help-fold summary {
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--t1);
-  padding: 8px 12px;
-  user-select: none;
-  list-style: none;
-}
-.help-fold summary::before {
-  content: '▸ ';
-  color: var(--t3);
-  font-size: 10px;
-}
-.help-fold[open] summary::before {
-  content: '▾ ';
-}
-.help-fold summary:hover {
-  background: var(--bg-hover);
-}
 .help-table {
   width: 100%;
   font-size: 12.5px;
@@ -272,19 +239,6 @@ button {
   border: 1px solid var(--line-strong);
   border-radius: 4px;
   padding: 1px 5px;
-  color: var(--t1);
-}
-.help-body {
-  padding: 4px 12px 10px;
-  border-top: 1px solid var(--line);
-}
-.help-body p {
-  margin: 6px 0;
-  font-size: 12.5px;
-  color: var(--t2);
-  line-height: 1.7;
-}
-.help-body b {
   color: var(--t1);
 }
 
@@ -707,26 +661,6 @@ button {
   padding-top: var(--safe-top);
   z-index: 50;
   animation: fade-in 0.16s ease;
-}
-.settings {
-  width: 320px;
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
-  margin: 44px 30px 0 0;
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 18px 18px 22px;
-}
-.settings-grip {
-  display: none;
-}
-.settings h3 {
-  margin: 0 0 14px;
-  font-size: 15px;
-  color: var(--t1);
-  font-family: var(--font-serif);
 }
 .set-group {
   margin-bottom: 16px;
@@ -1236,13 +1170,6 @@ button {
   .side-repo {
     font-size: 13px;
   }
-  .repo-menu {
-    width: 244px;
-  }
-  .repo-item {
-    font-size: 15px;
-    padding: 11px 12px;
-  }
   .statusbar {
     font-size: 13px;
     min-height: 38px;
@@ -1299,13 +1226,11 @@ button {
   }
 
   /* 手机输入框整体加高 */
-  .clone-card .palette-input,
-  .settings .palette-input {
+  .clone-card .palette-input {
     height: 46px;
     font-size: 15px;
     border-width: 1.5px;
   }
-  .settings .opt,
   .clone-card .opt {
     height: 40px;
     font-size: 14px;
@@ -1314,32 +1239,39 @@ button {
     height: 40px;
   }
 
-  /* 设置面板:底部抽屉(与目录抽屉同族) */
-  .mask:not(.mask--center) {
+  /* 对话框类弹层:手机端一律贴底抽屉化(各组件 scoped 里补外观) */
+  .mask--sheet {
     align-items: flex-end;
-    justify-content: stretch;
-    padding-top: 0;
+    padding-bottom: 0;
   }
-  .settings {
-    width: 100%;
-    margin: 0;
-    max-height: calc(100dvh - var(--safe-top) - 34px);
+
+  /* 文库菜单:手机端从 PC 下拉改为底部弹出卡(Obsidian 式) */
+  .repo-menu-mask {
+    background: rgba(8, 15, 24, 0.45);
+    z-index: 44;
+  }
+  .repo-menu {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    z-index: 45;
     border: none;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
-    padding: 6px 18px calc(20px + var(--safe-bottom));
+    padding: 12px 14px calc(16px + var(--safe-bottom));
     animation: sheet-up 0.22s ease;
   }
-  .settings-grip {
-    display: block;
-    width: 40px;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--line-strong);
-    margin: 6px auto 12px;
+  .repo-menu-label {
+    font-size: 13px;
+    padding: 2px 12px 10px;
   }
-  .settings h3 {
+  .repo-item {
     font-size: 16px;
+    padding: 13px 12px;
+    border-radius: var(--radius);
   }
 
   .side {
