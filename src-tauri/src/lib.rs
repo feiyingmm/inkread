@@ -448,7 +448,8 @@ mod android_jni {
             ("setBuiltInZoomControls", false),
             ("setDisplayZoomControls", false),
             ("setLoadWithOverviewMode", false),
-            ("setUseWideViewPort", false),
+            // 必须保持 true:false 会让布局视口固定在初始方向宽度,横竖屏旋转后右侧留白
+            ("setUseWideViewPort", true),
         ] {
             env.call_method(&settings, name, "(Z)V", &[JValue::Bool(v as u8)])?;
         }
