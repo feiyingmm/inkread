@@ -638,6 +638,44 @@ fn serve_repo_asset(app: &AppHandle, uri_path: &str) -> Result<(Vec<u8>, &'stati
     Ok((bytes, guess_mime(rel)))
 }
 
+/// Android:给 libgit2/OpenSSL 装上 CA 根证书。
+///
+/// Android 版链接的是 **vendored OpenSSL**,编译时 `--openssldir=/usr/local/ssl` ——
+/// 这个目录在 Android 上根本不存在,而系统证书在 `/system/etc/security/cacerts`
+/// 且文件名用的是 OpenSSL 1.0 的旧 subject hash,OpenSSL 3 按新 hash 查找命中不了。
+/// 结果是**任何 HTTPS 都报 "the SSL certificate is invalid"**,拉取/克隆/推送全废。
+/// (桌面端不受影响:Windows 上 libgit2 走 WinHTTP,用系统证书库。)
+///
+/// 解法是把 Mozilla CA bundle 打进包里,启动时释放到应用数据目录再指给 libgit2
+/// (OpenSSL 只认真实文件路径,读不了 APK 里的 asset)。
+#[cfg(target_os = "android")]
+fn install_ca_bundle(app: &AppHandle) {
+    const CA_BUNDLE: &[u8] = include_bytes!("../assets/cacert.pem");
+    let Ok(dir) = app.path().app_data_dir() else {
+        eprintln!("[inkread] 取不到 app_data_dir,CA 证书未安装");
+        return;
+    };
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = dir.join("cacert.pem");
+    // 体积一致就认为是同一份,避免每次启动都写 229KB
+    let stale = std::fs::metadata(&path)
+        .map(|m| m.len() != CA_BUNDLE.len() as u64)
+        .unwrap_or(true);
+    if stale {
+        if let Err(e) = std::fs::write(&path, CA_BUNDLE) {
+            eprintln!("[inkread] 写出 CA 证书失败: {e}");
+            return;
+        }
+    }
+    unsafe {
+        if let Err(e) = git2::opts::set_ssl_cert_file(&path) {
+            eprintln!("[inkread] 设置 CA 证书路径失败: {}", e.message());
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Android 上「添加本地 git 仓库」指向 /sdcard,那里的文件不属于 App 的 uid,
@@ -724,6 +762,8 @@ pub fn run() {
             take_launch_file
         ])
         .setup(|app| {
+            #[cfg(target_os = "android")]
+            install_ca_bundle(app.handle());
             let loaded = state::load_repos(app.handle());
             let state = app.state::<AppState>();
             *state.repos.lock().unwrap() = loaded;
