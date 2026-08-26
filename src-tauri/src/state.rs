@@ -14,11 +14,24 @@ pub struct RepoEntry {
     pub ephemeral: bool,
 }
 
+/// 新窗口开出来后要打开什么。三个字段互斥使用:
+/// `file` 走文件关联/命令行(绝对路径),`repo`+`doc` 走应用内「以新窗口打开」。
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowTarget {
+    pub file: Option<String>,
+    pub repo: Option<String>,
+    pub doc: Option<String>,
+}
+
 #[derive(Default)]
 pub struct AppState {
     pub repos: Mutex<Vec<RepoEntry>>,
     /// 本次进程启动时随命令行传入的 md 文件(双击/打开方式)
     pub launch_file: Mutex<Option<String>>,
+    /// 窗口 label → 该窗口开机要打开的目标;前端启动时取走一次。
+    /// 多窗口共用同一个进程(保留单实例),所以注册表只有一份、不会互相覆盖。
+    pub window_targets: Mutex<std::collections::HashMap<String, WindowTarget>>,
 }
 
 fn config_dir(app: &AppHandle) -> PathBuf {

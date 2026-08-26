@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { errMsg } from '@/core/errmsg'
+import { isMainWindow } from '@/core/window'
 import { backend, type GitOpResult, type GitStatus, type RepoMeta, type TreeNode } from '@/core/backend'
 
 export const useRepoStore = defineStore('repo', () => {
@@ -16,7 +18,9 @@ export const useRepoStore = defineStore('repo', () => {
     error.value = ''
     try {
       repos.value = await backend.listRepos()
-      const saved = localStorage.getItem('inkread:repo')
+      // 只有主窗口跟随"上次打开的文库";副窗口由 WindowTarget 指定,不读全局键,
+      // 否则多窗口会互相把当前文库改掉(localStorage 在同进程所有窗口间共享)
+      const saved = isMainWindow ? localStorage.getItem('inkread:repo') : null
       if (saved && repos.value.some((r) => r.id === saved)) {
         currentRepoId.value = saved
       } else if (!repos.value.some((r) => r.id === currentRepoId.value)) {
@@ -24,7 +28,7 @@ export const useRepoStore = defineStore('repo', () => {
       }
       if (currentRepoId.value) await refresh()
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = errMsg(e)
     } finally {
       loading.value = false
     }
@@ -34,7 +38,7 @@ export const useRepoStore = defineStore('repo', () => {
   async function setCurrent(id: string) {
     if (id === currentRepoId.value) return
     currentRepoId.value = id
-    localStorage.setItem('inkread:repo', id)
+    if (isMainWindow) localStorage.setItem('inkread:repo', id)
     tree.value = []
     status.value = null
     await refresh()
@@ -62,7 +66,7 @@ export const useRepoStore = defineStore('repo', () => {
       else refreshStatus()
       return r
     } catch (e) {
-      return { ok: false, changed: false, message: (e as Error).message }
+      return { ok: false, changed: false, message: errMsg(e) }
     } finally {
       pulling.value = false
     }

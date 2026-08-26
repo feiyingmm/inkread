@@ -63,6 +63,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { errMsg } from '@/core/errmsg'
 import { backend, isTauri } from '@/core/backend'
 import { toast } from '@/core/toast'
 import Icon from '@/components/Icon.vue'
@@ -101,7 +102,7 @@ async function load(path: string): Promise<void> {
   try {
     listing.value = await invoke<DirListing>('list_dirs', { path })
   } catch (e) {
-    browseError.value = typeof e === 'string' ? e : (e as Error).message
+    browseError.value = errMsg(e)
   }
 }
 
@@ -124,7 +125,7 @@ async function requestPerm(): Promise<void> {
   try {
     await invoke('request_storage_access')
   } catch (e) {
-    toast(typeof e === 'string' ? e : (e as Error).message, true)
+    toast(errMsg(e), true)
   }
 }
 
@@ -157,7 +158,7 @@ async function addPath(path: string): Promise<void> {
     emit('done', meta.id)
     emit('close')
   } catch (e) {
-    const msg = typeof e === 'string' ? e : (e as Error).message
+    const msg = errMsg(e)
     toast(msg, true)
   } finally {
     busy.value = false

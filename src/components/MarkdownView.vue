@@ -31,6 +31,7 @@
 
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { errMsg } from '@/core/errmsg'
 import { backend } from '@/core/backend'
 import { dirOf, extOf, fileKind } from '@/core/paths'
 import { renderMarkdown, renderPlainText, type TocItem } from '@/core/markdown/pipeline'
@@ -140,7 +141,7 @@ async function load(): Promise<void> {
     }
   } catch (e) {
     if (seq !== loadSeq) return
-    errorMsg.value = `文档读取失败:${(e as Error).message}`
+    errorMsg.value = `文档读取失败:${errMsg(e)}`
     return
   }
   await nextTick()

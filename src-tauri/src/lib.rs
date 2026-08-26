@@ -57,6 +57,19 @@ fn add_repo_local(app: AppHandle, state: State<AppState>, path: String) -> Resul
     Ok(RepoMeta { id, name })
 }
 
+/// 从文库列表移除一条记录。**只摘注册表,不删磁盘上的任何文件**——
+/// 克隆来的仓库也一样保留在原处,用户想彻底删除请自行删目录。
+#[tauri::command]
+fn remove_repo(app: AppHandle, state: State<AppState>, repo_id: String) -> Result<(), String> {
+    let mut repos = state.repos.lock().map_err(|e| e.to_string())?;
+    let before = repos.len();
+    repos.retain(|r| r.id != repo_id);
+    if repos.len() == before {
+        return Err(format!("未知仓库: {repo_id}"));
+    }
+    state::save_repos(&app, &repos)
+}
+
 #[tauri::command]
 fn add_repo_clone(
     app: AppHandle,
@@ -167,6 +180,53 @@ fn open_path(state: State<AppState>, path: String) -> Result<OpenedPath, String>
 #[tauri::command]
 fn take_launch_file(state: State<AppState>) -> Option<String> {
     state.launch_file.lock().ok()?.take()
+}
+
+/// 新窗口 label 计数器。窗口全关后计数不回退,避免复用 label 撞上尚未销毁的窗口。
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+static NEXT_WINDOW_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+/// 新开一个墨阅窗口,并登记它开机要打开的目标(前端启动时用 take_window_target 取走)。
+/// 多窗口共用同一进程,因此文库注册表、令牌只有一份,不存在并发写覆盖。
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn spawn_window(app: &AppHandle, target: state::WindowTarget) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    let seq = NEXT_WINDOW_SEQ.fetch_add(1, Ordering::Relaxed);
+    let label = format!("w{seq}");
+    {
+        let st = app.state::<AppState>();
+        let mut map = st.window_targets.lock().map_err(|e| e.to_string())?;
+        map.insert(label.clone(), target);
+    }
+    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title("墨阅")
+        .inner_size(1280.0, 820.0)
+        .min_inner_size(760.0, 500.0)
+        .center()
+        .build()
+        .map_err(|e| format!("新窗口创建失败: {e}"))?;
+    Ok(())
+}
+
+/// 应用内「以新窗口打开」。Android 无多窗口,直接报错由前端拦住(菜单项本就不显示)。
+#[tauri::command]
+fn open_new_window(_app: AppHandle, _target: state::WindowTarget) -> Result<(), String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        return spawn_window(&_app, _target);
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    Err("移动端不支持多窗口".into())
+}
+
+/// 取走本窗口开机要打开的目标(只能取一次)。主窗口通常没有,返回 null。
+#[tauri::command]
+fn take_window_target(
+    state: State<AppState>,
+    window: tauri::Window,
+) -> Result<Option<state::WindowTarget>, String> {
+    let mut map = state.window_targets.lock().map_err(|e| e.to_string())?;
+    Ok(map.remove(window.label()))
 }
 
 fn pick_md_from_args<I: IntoIterator<Item = String>>(args: I) -> Option<String> {
@@ -518,8 +578,15 @@ mod android_jni {
     }
 }
 
+/// 保存/删除某域名的令牌。
+/// host 会先规范化:用户常直接粘贴完整仓库地址(如 https://gitee.com/user/repo),
+/// 若原样当 key 存下,后续换个写法(带 .git、带尾斜杠、大小写不同)就匹配不上了。
 #[tauri::command]
 fn save_token(app: AppHandle, host: String, token: String) -> Result<(), String> {
+    let host = gitops::host_of(host.trim()).to_lowercase();
+    if host.is_empty() {
+        return Err("域名不能为空".into());
+    }
     let mut map = state::load_tokens(&app);
     if token.is_empty() {
         map.remove(&host);
@@ -527,6 +594,15 @@ fn save_token(app: AppHandle, host: String, token: String) -> Result<(), String>
         map.insert(host, token);
     }
     state::save_tokens(&app, &map)
+}
+
+/// 已保存令牌的域名列表(只回域名,不回令牌值)。
+/// 令牌框出于安全不回填,若再不给个"存了哪些域名"的反馈,用户无从判断是否保存成功。
+#[tauri::command]
+fn list_token_hosts(app: AppHandle) -> Result<Vec<String>, String> {
+    let mut hosts: Vec<String> = state::load_tokens(&app).into_keys().collect();
+    hosts.sort();
+    Ok(hosts)
 }
 
 #[tauri::command]
@@ -576,15 +652,23 @@ pub fn run() {
 
     let builder = tauri::Builder::default();
 
-    // 单实例:再次双击 md 文件时复用已开窗口(仅桌面)
+    // 单实例:**进程**只有一个(注册表 repos.json 只能有一个写者,多进程会互相覆盖),
+    // 但双击 md 文件不再顶掉已开窗口的内容,而是新开一个窗口装它。
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-        use tauri::Emitter;
-        if let Some(p) = pick_md_from_args(argv) {
-            let _ = app.emit("open-file", p);
-        }
-        if let Some(w) = app.get_webview_window("main") {
-            let _ = w.set_focus();
+        match pick_md_from_args(argv) {
+            Some(p) => {
+                let target = state::WindowTarget { file: Some(p), ..Default::default() };
+                if let Err(e) = spawn_window(app, target) {
+                    eprintln!("新窗口创建失败: {e}");
+                }
+            }
+            // 没带文件的重复启动(点图标):聚焦已有窗口,不再开新的
+            None => {
+                if let Some(w) = app.webview_windows().values().next() {
+                    let _ = w.set_focus();
+                }
+            }
         }
     }));
 
@@ -611,6 +695,9 @@ pub fn run() {
             list_repos,
             add_repo_local,
             add_repo_clone,
+            remove_repo,
+            open_new_window,
+            take_window_target,
             list_tree,
             read_file,
             write_file,
@@ -626,6 +713,7 @@ pub fn run() {
             git_sync,
             search_repo,
             save_token,
+            list_token_hosts,
             get_token,
             export_file,
             check_storage_access,

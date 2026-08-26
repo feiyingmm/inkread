@@ -3,12 +3,27 @@
     <div class="set-modal">
       <header class="sm-head">
         <div class="sm-grip"></div>
-        <h3 class="sm-title">设置</h3>
+        <!-- 手机端二级页:左上角返回,标题换成分组名(Obsidian 式) -->
+        <button v-if="isNarrow && !atRoot" class="sm-back" title="返回" @click="atRoot = true">
+          <Icon name="back" :size="18" />
+        </button>
+        <h3 class="sm-title">{{ isNarrow && !atRoot ? currentTabLabel : '设置' }}</h3>
         <button class="sm-close" title="关闭 (Esc)" @click="emit('close')"><Icon name="close" :size="18" /></button>
       </header>
 
-      <div class="sm-body">
-        <nav class="sm-nav">
+      <!-- 手机端一级页:分组列表,点进去才是具体设置项 -->
+      <div v-if="isNarrow && atRoot" class="sm-body sm-body--root">
+        <div class="sm-group">
+          <button v-for="t in TABS" :key="t.key" class="sm-entry" @click="openTab(t.key)">
+            <span class="se-icon"><Icon :name="t.icon" :size="19" /></span>
+            <span class="se-label">{{ t.label }}</span>
+            <span class="se-arrow"><Icon name="forward" :size="16" /></span>
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="sm-body">
+        <nav v-if="!isNarrow" class="sm-nav">
           <button
             v-for="t in TABS"
             :key="t.key"
@@ -144,7 +159,23 @@
                   <div class="si-title">访问令牌</div>
                   <div class="si-desc">私有仓库拉取/推送用,按域名保存。桌面端优先使用系统 git 已保存的凭据。</div>
                 </div>
-                <input v-model="tokenHost" class="si-input" placeholder="域名,如 gitee.com" />
+                <div v-if="savedHosts.length" class="tok-saved">
+                  <span class="tok-saved-label">已保存</span>
+                  <button
+                    v-for="h in savedHosts"
+                    :key="h"
+                    class="tok-chip"
+                    :class="{ 'is-cur': h === normalizedHost }"
+                    @click="tokenHost = h"
+                  >
+                    {{ h }}
+                  </button>
+                </div>
+                <div v-else class="si-desc tok-saved-none">尚未保存任何域名的令牌</div>
+                <input v-model="tokenHost" class="si-input" placeholder="域名,如 gitee.com(粘贴完整仓库地址也可以)" />
+                <div v-if="normalizedHost && normalizedHost !== tokenHost.trim()" class="si-desc tok-hint">
+                  将保存到域名:<b>{{ normalizedHost }}</b>
+                </div>
                 <input v-model="tokenValue" class="si-input" type="password" placeholder="Personal Access Token" />
                 <div class="si-btns">
                   <button class="opt is-on" :disabled="!tokenHost.trim()" @click="saveTok">保存令牌</button>
@@ -199,7 +230,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { errMsg } from '@/core/errmsg'
 import { useSettings } from '@/stores/settings'
 import { backend, isTauri } from '@/core/backend'
 import { toast } from '@/core/toast'
@@ -220,8 +252,50 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 ]
 
 const tab = ref<TabKey>('appearance')
-const tokenHost = ref('gitee.com')
+
+/**
+ * 手机端改成 Obsidian 式两级页:一级是分组列表,点进去才是具体设置项。
+ * 横向 tab 条在窄屏放不下 6 个分组(要横向滚动、看不全),桌面端保持不变。
+ */
+const narrowMq = window.matchMedia('(max-width: 900px)')
+const isNarrow = ref(narrowMq.matches)
+narrowMq.addEventListener('change', (e) => {
+  isNarrow.value = e.matches
+  if (!e.matches) atRoot.value = false
+})
+const atRoot = ref(narrowMq.matches)
+const currentTabLabel = computed(() => TABS.find((t) => t.key === tab.value)?.label ?? '设置')
+
+function openTab(key: TabKey): void {
+  tab.value = key
+  atRoot.value = false
+}
+
+const tokenHost = ref('')
 const tokenValue = ref('')
+/** 已保存令牌的域名;令牌值出于安全不回填,靠这个列表让用户确认存没存上 */
+const savedHosts = ref<string[]>([])
+
+/** 与后端 gitops::host_of 同规则:用户粘贴完整仓库地址时抽出域名 */
+const normalizedHost = computed(() => {
+  const raw = tokenHost.value.trim()
+  if (!raw) return ''
+  const afterScheme = raw.includes('://') ? raw.slice(raw.indexOf('://') + 3) : raw
+  const authority = afterScheme.split('/')[0] ?? ''
+  const hostPart = authority.includes('@') ? authority.slice(authority.lastIndexOf('@') + 1) : authority
+  return (raw.includes('://') ? hostPart : hostPart.split(':')[0] ?? hostPart).toLowerCase()
+})
+
+async function loadHosts(): Promise<void> {
+  if (!isTauri) return
+  try {
+    savedHosts.value = await backend.listTokenHosts()
+    if (!tokenHost.value) tokenHost.value = savedHosts.value[0] ?? 'gitee.com'
+  } catch {
+    /* 读不到就当没有,不打断设置面板 */
+  }
+}
+onMounted(loadHosts)
 const version = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
 
 function openRepo(): void {
@@ -236,18 +310,23 @@ async function saveTok(): Promise<void> {
   try {
     await backend.saveToken(tokenHost.value.trim(), tokenValue.value.trim())
     tokenValue.value = ''
-    toast('令牌已保存')
+    const host = normalizedHost.value
+    tokenHost.value = host
+    await loadHosts()
+    toast(`已保存 ${host} 的令牌`)
   } catch (e) {
-    toast((e as Error).message, true)
+    toast(errMsg(e), true)
   }
 }
 
 async function clearTok(): Promise<void> {
   try {
+    const host = normalizedHost.value
     await backend.saveToken(tokenHost.value.trim(), '')
-    toast('已删除该域令牌')
+    await loadHosts()
+    toast(`已删除 ${host} 的令牌`)
   } catch (e) {
-    toast((e as Error).message, true)
+    toast(errMsg(e), true)
   }
 }
 </script>
@@ -307,10 +386,74 @@ async function clearTok(): Promise<void> {
   color: var(--t1);
 }
 
+.sm-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 6px;
+  margin-left: -6px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--t2);
+  cursor: pointer;
+}
+.sm-back:active {
+  background: var(--bg-hover);
+}
+
 .sm-body {
   flex: 1;
   display: flex;
   min-height: 0;
+}
+
+/* ---------- 手机端一级页:分组列表(Obsidian 式) ---------- */
+.sm-body--root {
+  display: block;
+  overflow-y: auto;
+  padding: 14px 14px calc(20px + var(--safe-bottom));
+}
+.sm-group {
+  background: var(--bg-side);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.sm-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--t1);
+  font-size: 16px;
+  text-align: left;
+  padding: 15px 14px;
+  cursor: pointer;
+}
+.sm-entry + .sm-entry {
+  border-top: 1px solid var(--line);
+}
+.sm-entry:active {
+  background: var(--bg-hover);
+}
+.se-icon {
+  display: inline-flex;
+  color: var(--t2);
+  flex-shrink: 0;
+}
+.se-label {
+  flex: 1;
+  min-width: 0;
+}
+.se-arrow {
+  display: inline-flex;
+  color: var(--t3);
+  flex-shrink: 0;
 }
 
 /* 左侧分类导航(桌面) */
@@ -478,6 +621,38 @@ async function clearTok(): Promise<void> {
   gap: 8px;
 }
 
+/* 已保存域名回显:令牌值不回填,靠这排 chip 让用户确认存没存上 */
+.tok-saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.tok-saved-label {
+  font-size: 12px;
+  color: var(--t3);
+}
+.tok-saved-none {
+  padding: 2px 0;
+}
+.tok-chip {
+  border: 1px solid var(--line-strong);
+  background: var(--bg-side);
+  color: var(--t2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tok-chip.is-cur {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.tok-hint {
+  padding: 0;
+}
+
 .sm-sub {
   font-size: 12px;
   color: var(--t3);
@@ -559,35 +734,20 @@ async function clearTok(): Promise<void> {
     height: 40px;
     background: var(--bg-side);
   }
+  /* 返回键与关闭键对称贴两侧;标题居中(sm-head 在窄屏是 column 布局) */
+  .sm-back {
+    position: absolute;
+    left: 10px;
+    top: 14px;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    background: var(--bg-side);
+  }
   .sm-body {
     flex-direction: column;
   }
-  .sm-nav {
-    width: 100%;
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    background: var(--bg-card);
-    padding: 4px 12px 10px;
-    gap: 6px;
-    scrollbar-width: none;
-  }
-  .sm-nav::-webkit-scrollbar {
-    display: none;
-  }
-  .sm-nav-item {
-    width: auto;
-    flex-shrink: 0;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    padding: 7px 14px;
-    font-size: 13.5px;
-  }
-  .sm-nav-item.is-on {
-    border-color: var(--accent);
-  }
+  /* 窄屏不再渲染横向 tab 条(改走一级列表 → 二级页),故此处无 .sm-nav 样式 */
   .sm-content {
     padding: 2px 18px calc(20px + var(--safe-bottom));
   }

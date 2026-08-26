@@ -231,6 +231,45 @@ button {
   margin: 6px 4px;
 }
 
+/* 文库条目 = 切换按钮 + 移除按钮;移除只摘记录不删文件 */
+.repo-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.repo-item--grow {
+  min-width: 0;
+  flex: 1;
+}
+.repo-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--t3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.repo-row:hover .repo-del {
+  opacity: 1;
+}
+.repo-del:hover {
+  background: var(--bg-hover);
+  color: var(--danger, #c0392b);
+}
+/* 触屏没有 hover,移除按钮常驻 */
+@media (hover: none) {
+  .repo-del {
+    opacity: 1;
+  }
+}
+
 /* ---------- 文件树右键/长按菜单 ---------- */
 .ctx-mask {
   position: fixed;

@@ -3,6 +3,13 @@ export interface RepoMeta {
   name: string
 }
 
+/** 新窗口开机要打开什么:file(绝对路径,文件关联/命令行)与 repo+doc(应用内)二选一 */
+export interface WindowTarget {
+  file?: string | null
+  repo?: string | null
+  doc?: string | null
+}
+
 export interface TreeNode {
   name: string
   path: string
@@ -75,8 +82,16 @@ export interface Backend {
   addRepoLocal(path: string): Promise<RepoMeta>
   /** 克隆远程仓库(HTTPS;私有仓库带 token,token 按 host 保存供后续 pull/push 复用) */
   addRepoClone(url: string, token?: string): Promise<RepoMeta>
-  /** 保存/更新某 host 的访问令牌(空 token 表示删除) */
+  /** 从文库列表移除一条记录(只摘注册表,不删磁盘上的文件) */
+  removeRepo(repoId: string): Promise<void>
+  /** 桌面端:新开一个窗口并在其中打开指定目标(file 绝对路径 或 repo+doc) */
+  openNewWindow(target: WindowTarget): Promise<void>
+  /** 取走本窗口开机要打开的目标(只能取一次;主窗口通常为 null) */
+  takeWindowTarget(): Promise<WindowTarget | null>
+  /** 保存/更新某 host 的访问令牌(空 token 表示删除;host 传完整仓库地址也会被规范化成域名) */
   saveToken(host: string, token: string): Promise<void>
+  /** 已保存令牌的域名列表(不含令牌值,仅供界面回显"存了哪些") */
+  listTokenHosts(): Promise<string[]>
   /** 新建空文档(父目录自动创建;已存在则报错) */
   createFile(repoId: string, path: string): Promise<void>
   /** 新建文件夹(内置 .gitkeep 占位,保证空目录能进 git 同步) */

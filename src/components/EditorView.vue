@@ -7,6 +7,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { errMsg } from '@/core/errmsg'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { backend } from '@/core/backend'
@@ -51,7 +52,7 @@ async function save(silent = false): Promise<boolean> {
     emit('saved')
     return true
   } catch (e) {
-    toast(`保存失败:${(e as Error).message}`, true)
+    toast(`保存失败:${errMsg(e)}`, true)
     return false
   }
 }
@@ -87,7 +88,7 @@ async function saveImages(files: File[]): Promise<void> {
       toast('图片已存入 assets/')
       onInput()
     } catch (e) {
-      toast(`图片保存失败:${(e as Error).message}`, true)
+      toast(`图片保存失败:${errMsg(e)}`, true)
     }
   }
 }
@@ -151,7 +152,7 @@ onMounted(async () => {
       },
     })
   } catch (e) {
-    loadError.value = `编辑器加载失败:${(e as Error).message}`
+    loadError.value = `编辑器加载失败:${errMsg(e)}`
   }
 })
 

@@ -45,6 +45,20 @@ fn open(path: &Path) -> Result<Repository, String> {
     Repository::open(path).map_err(|e| format!("打开仓库失败: {}", e.message()))
 }
 
+/// 从远程地址里抽域名。用于两处:凭据匹配失败时的提示文案、保存令牌时把用户
+/// 误填的完整仓库地址规范化成域名(实测用户会直接粘贴 https://gitee.com/xx/yy)。
+/// 兼容 `https://user@host/path` 与 `git@host:path` 两种写法;已经是纯域名则原样返回。
+pub fn host_of(url: &str) -> String {
+    if let Some(rest) = url.split("://").nth(1) {
+        let authority = rest.split('/').next().unwrap_or("");
+        authority.rsplit('@').next().unwrap_or(authority).to_string()
+    } else if let Some((_, rest)) = url.split_once('@') {
+        rest.split(':').next().unwrap_or(rest).to_string()
+    } else {
+        url.to_string()
+    }
+}
+
 fn make_callbacks(tokens: HashMap<String, String>) -> RemoteCallbacks<'static> {
     let mut cb = RemoteCallbacks::new();
     cb.credentials(move |url, username_from_url, allowed| {
@@ -62,8 +76,29 @@ fn make_callbacks(tokens: HashMap<String, String>) -> RemoteCallbacks<'static> {
                     return Cred::userpass_plaintext(user, token);
                 }
             }
+            // 走到这里说明是 HTTPS 但没有可用令牌 —— 把域名和已存域名都报出来,
+            // 否则用户只看到"没有可用凭据",分不清是没存、还是域名写得对不上
+            let host = host_of(url);
+            let saved = if tokens.is_empty() {
+                "当前一个都没保存".to_string()
+            } else {
+                let mut ks: Vec<&str> = tokens.keys().map(|s| s.as_str()).collect();
+                ks.sort_unstable();
+                format!("已保存的域名: {}", ks.join(", "))
+            };
+            return Err(git2::Error::from_str(&format!(
+                "没有匹配「{host}」的访问令牌({saved})。请在 设置 → Git 令牌 中为该域名添加令牌"
+            )));
         }
-        Err(git2::Error::from_str("没有可用凭据,请在设置中配置访问令牌"))
+        if allowed.contains(CredentialType::SSH_KEY) {
+            return Err(git2::Error::from_str(
+                "该文库的远程地址是 SSH(git@…),墨阅只支持 HTTPS + 访问令牌。\
+                 请把远程地址改为 https:// 形式后重试",
+            ));
+        }
+        Err(git2::Error::from_str(&format!(
+            "远程要求的认证方式不受支持({allowed:?}),墨阅只支持 HTTPS + 访问令牌"
+        )))
     });
     cb
 }

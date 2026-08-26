@@ -17,16 +17,23 @@
             <div class="repo-menu-mask" @click="repoMenuOpen = false"></div>
             <div class="repo-menu">
               <div class="repo-menu-label">文库</div>
-              <button
-                v-for="r in repo.repos"
-                :key="r.id"
-                class="repo-item"
-                :class="{ 'is-on': r.id === repo.currentRepoId }"
-                @click="switchRepo(r.id)"
-              >
-                {{ r.name }}
-                <span v-if="r.id === repo.currentRepoId" class="repo-check"><Icon name="check" :size="14" /></span>
-              </button>
+              <div v-for="r in repo.repos" :key="r.id" class="repo-row">
+                <button
+                  class="repo-item repo-item--grow"
+                  :class="{ 'is-on': r.id === repo.currentRepoId }"
+                  @click="switchRepo(r.id)"
+                >
+                  {{ r.name }}
+                  <span v-if="r.id === repo.currentRepoId" class="repo-check"><Icon name="check" :size="14" /></span>
+                </button>
+                <button
+                  class="repo-del"
+                  title="从列表移除(不删除磁盘文件)"
+                  @click.stop="onRemoveRepo(r)"
+                >
+                  <Icon name="close" :size="14" />
+                </button>
+              </div>
               <div class="repo-menu-sep"></div>
               <button class="repo-item" @click="onAddLocal">
                 <span class="ri-icon"><Icon name="folder" :size="15" /></span>添加本地仓库…
@@ -57,7 +64,7 @@
             <Icon :name="modeIcon" />
           </button>
           <span class="sf-flex"></span>
-          <button class="tbtn" title="设置" @click="settingsOpen = true"><Icon name="sliders" /></button>
+          <button class="tbtn" title="设置" @click="settingsOpen = true"><Icon name="gear" /></button>
         </div>
       </aside>
 
@@ -221,6 +228,12 @@
             <span class="ri-icon"><Icon name="folder-plus" :size="15" /></span>新建文件夹…
           </button>
         </template>
+        <template v-if="entryMenu.node && entryMenu.node.type === 'file' && !isNarrow && isTauri">
+          <div class="repo-menu-sep"></div>
+          <button class="repo-item" @click="onOpenInNewWindow(entryMenu.node)">
+            <span class="ri-icon"><Icon name="external" :size="15" /></span>以新窗口打开
+          </button>
+        </template>
         <template v-if="entryMenu.node">
           <div class="repo-menu-sep"></div>
           <button class="repo-item" @click="startRename(entryMenu.node)">
@@ -281,6 +294,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { errMsg } from '@/core/errmsg'
 import { useRoute, useRouter } from 'vue-router'
 import FileTree from '@/components/FileTree.vue'
 import TopBar from '@/components/TopBar.vue'
@@ -427,7 +441,7 @@ async function doCreate(): Promise<void> {
     toast(kind === 'file' ? '文档已创建' : '文件夹已创建')
     repo.refreshStatus()
   } catch (e) {
-    toast(typeof e === 'string' ? e : (e as Error).message, true)
+    toast(errMsg(e), true)
   } finally {
     creating.value = false
   }
@@ -481,7 +495,7 @@ async function onDiscardFile(c: GitChange): Promise<void> {
       else mdView.value?.reload()
     }
   } catch (e) {
-    toast(typeof e === 'string' ? e : (e as Error).message, true)
+    toast(errMsg(e), true)
   }
 }
 
@@ -529,7 +543,7 @@ async function doRename(): Promise<void> {
     treeReveal.value = to
     repo.refreshStatus()
   } catch (e) {
-    toast(typeof e === 'string' ? e : (e as Error).message, true)
+    toast(errMsg(e), true)
   } finally {
     creating.value = false
   }
@@ -550,7 +564,7 @@ async function doDelete(node: TreeNode): Promise<void> {
     await repo.refresh()
     repo.refreshStatus()
   } catch (e) {
-    toast(typeof e === 'string' ? e : (e as Error).message, true)
+    toast(errMsg(e), true)
   }
 }
 
@@ -585,7 +599,7 @@ async function doExport(type: 'html' | 'print'): Promise<void> {
     }
     toast('已导出 HTML')
   } catch (e) {
-    toast(`导出失败:${(e as Error).message}`, true)
+    toast(`导出失败:${errMsg(e)}`, true)
   }
 }
 
@@ -669,7 +683,7 @@ async function doSync(): Promise<void> {
       toast(r.message, !r.ok)
     }
   } catch (e) {
-    toast(`同步失败:${(e as Error).message}`, true)
+    toast(`同步失败:${errMsg(e)}`, true)
   } finally {
     syncing.value = false
     repo.refreshStatus()
@@ -685,7 +699,7 @@ async function pickLocalRepo(): Promise<void> {
     await repo.init()
     await switchRepo(added.id)
   } catch (e) {
-    toast((e as Error).message, true)
+    toast(errMsg(e), true)
   }
 }
 
@@ -745,6 +759,29 @@ async function switchRepo(id: string): Promise<void> {
   openDefaultDoc()
 }
 
+/** 从文库列表移除一条记录;磁盘文件不动。移除的是当前文库时落到剩余第一个 */
+async function onRemoveRepo(r: { id: string; name: string }): Promise<void> {
+  if (!window.confirm(`从文库列表中移除「${r.name}」?\n\n只是不再显示,磁盘上的文件不会被删除。`)) return
+  const wasCurrent = r.id === repo.currentRepoId
+  try {
+    await backend.removeRepo(r.id)
+    await repo.init()
+    toast(`已移除「${r.name}」`)
+  } catch (e) {
+    toast(errMsg(e), true)
+    return
+  }
+  if (!wasCurrent) return
+  repoMenuOpen.value = false
+  editMode.value = false
+  await router.replace({ query: {} })
+  const next = repo.repos[0]?.id ?? ''
+  if (next) {
+    await repo.setCurrent(next)
+    openDefaultDoc()
+  }
+}
+
 function onAddLocal(): void {
   repoMenuOpen.value = false
   if (!isTauri) {
@@ -792,7 +829,7 @@ async function onDiscardLocal(): Promise<void> {
       mdView.value?.reload()
     }
   } catch (e) {
-    toast(`操作失败:${(e as Error).message}`, true)
+    toast(`操作失败:${errMsg(e)}`, true)
   } finally {
     repo.refreshStatus()
   }
@@ -926,23 +963,53 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-/** Tauri:双击 md / 「打开方式」进入的单文件,以所在目录建临时文库打开 */
+/** 单文件(双击 md /「打开方式」)以所在目录建临时文库打开 */
+async function openAbsFile(abs: string): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  try {
+    const r = await invoke<{ repoId: string; path: string }>('open_path', { path: abs })
+    await repo.init()
+    if (repo.currentRepoId !== r.repoId) await repo.setCurrent(r.repoId)
+    openFile(r.path)
+  } catch (e) {
+    toast(errMsg(e), true)
+  }
+}
+
+/**
+ * Tauri 启动流程:
+ * - 本窗口若被登记了打开目标(副窗口 / 文件关联新开的窗口),按目标打开
+ * - 主窗口冷启动仍走 take_launch_file(命令行带的文件)
+ * 再次双击 md 文件由 Rust 侧新开窗口承接,不再 emit 事件顶掉当前窗口内容。
+ */
 async function setupTauriFileOpen(): Promise<void> {
   const { invoke } = await import('@tauri-apps/api/core')
-  const { listen } = await import('@tauri-apps/api/event')
-  const openAbs = async (abs: string) => {
-    try {
-      const r = await invoke<{ repoId: string; path: string }>('open_path', { path: abs })
-      await repo.init()
-      if (repo.currentRepoId !== r.repoId) await repo.setCurrent(r.repoId)
-      openFile(r.path)
-    } catch (e) {
-      toast(typeof e === 'string' ? e : (e as Error).message, true)
-    }
+  const target = await backend.takeWindowTarget().catch(() => null)
+  if (target?.file) {
+    await openAbsFile(target.file)
+    return
+  }
+  if (target?.repo) {
+    await repo.init()
+    if (repo.currentRepoId !== target.repo) await repo.setCurrent(target.repo)
+    if (target.doc) openFile(target.doc)
+    return
   }
   const lf = await invoke<string | null>('take_launch_file')
-  if (lf) await openAbs(lf)
-  await listen<string>('open-file', (e) => void openAbs(e.payload))
+  if (lf) await openAbsFile(lf)
+}
+
+/** 桌面端:在新窗口打开树里选中的条目(目录则只切到该文库) */
+async function onOpenInNewWindow(node: TreeNode | null): Promise<void> {
+  entryMenu.value = null
+  try {
+    await backend.openNewWindow({
+      repo: repo.currentRepoId,
+      doc: node && node.type === 'file' ? node.path : null,
+    })
+  } catch (e) {
+    toast(errMsg(e), true)
+  }
 }
 
 onMounted(async () => {

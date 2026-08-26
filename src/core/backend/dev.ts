@@ -1,4 +1,4 @@
-import type { Backend, FileContent, GitOpResult, GitStatus, RepoMeta, SearchHit, TreeNode } from './types'
+import type { Backend, FileContent, GitOpResult, GitStatus, RepoMeta, SearchHit, TreeNode, WindowTarget } from './types'
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -42,8 +42,13 @@ export const devBackend: Backend = {
     Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 添加仓库')),
   addRepoClone: () =>
     Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 添加仓库')),
+  removeRepo: () =>
+    Promise.reject(new Error('开发模式请编辑 dev-server/repos.local.json 移除仓库')),
+  openNewWindow: () => Promise.reject(new Error('开发模式不支持多窗口')),
+  takeWindowTarget: (): Promise<WindowTarget | null> => Promise.resolve(null),
   saveToken: () =>
     Promise.reject(new Error('开发模式凭据走系统 git,无需配置令牌')),
+  listTokenHosts: () => Promise.resolve([]),
   createFile: (repo, path) => post<void>(`/api/create-file?repo=${enc(repo)}&path=${enc(path)}`),
   createDir: (repo, path) => post<void>(`/api/create-dir?repo=${enc(repo)}&path=${enc(path)}`),
   renameEntry: (repo, from, to) => post<void>(`/api/rename?repo=${enc(repo)}&path=${enc(from)}&to=${enc(to)}`),

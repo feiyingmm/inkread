@@ -8,6 +8,7 @@ import type {
   RepoMeta,
   SearchHit,
   TreeNode,
+  WindowTarget,
 } from './types'
 
 /** 打包运行时:invoke Rust 命令(git2/fs/搜索),与 DevBackend 同契约 */
@@ -26,7 +27,11 @@ export const tauriBackend: Backend = {
   openExternal: (url) => openUrl(url),
   addRepoLocal: (path) => invoke<RepoMeta>('add_repo_local', { path }),
   addRepoClone: (url, token) => invoke<RepoMeta>('add_repo_clone', { url, token }),
+  removeRepo: (repoId) => invoke<void>('remove_repo', { repoId }),
+  openNewWindow: (target) => invoke<void>('open_new_window', { target }),
+  takeWindowTarget: () => invoke<WindowTarget | null>('take_window_target'),
   saveToken: (host, token) => invoke<void>('save_token', { host, token }),
+  listTokenHosts: () => invoke<string[]>('list_token_hosts'),
   createFile: (repoId, path) => invoke<void>('create_file', { repoId, path }),
   createDir: (repoId, path) => invoke<void>('create_dir', { repoId, path }),
   renameEntry: (repoId, from, to) => invoke<void>('rename_entry', { repoId, from, to }),

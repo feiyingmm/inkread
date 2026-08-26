@@ -24,8 +24,9 @@ export async function renderMermaidBlocks(root: HTMLElement, dark: boolean): Pro
       block.classList.add('is-rendered')
     } catch (e) {
       document.getElementById(`dinkmmd-${seq}`)?.remove()
-      target.innerHTML = `<div class="mermaid-error">Mermaid 渲染失败:${(e as Error).message ?? String(e)}</div>`
+      target.innerHTML = `<div class="mermaid-error">Mermaid 渲染失败:${errMsg(e)}</div>`
       block.classList.add('is-rendered')
     }
   }
-}
+}import { errMsg } from '@/core/errmsg'
+

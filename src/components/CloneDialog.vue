@@ -22,6 +22,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { errMsg } from '@/core/errmsg'
 import { backend } from '@/core/backend'
 import { toast } from '@/core/toast'
 
@@ -39,7 +40,7 @@ async function doClone(): Promise<void> {
     emit('done', meta.id)
     emit('close')
   } catch (e) {
-    toast((e as Error).message, true)
+    toast(errMsg(e), true)
   } finally {
     cloning.value = false
   }
