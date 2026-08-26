@@ -16,7 +16,7 @@ struct RepoMeta {
 }
 
 #[tauri::command]
-fn list_repos(state: State<AppState>) -> Result<Vec<RepoMeta>, String> {
+fn list_repos(state: State<'_, AppState>) -> Result<Vec<RepoMeta>, String> {
     let repos = state.repos.lock().map_err(|e| e.to_string())?;
     Ok(repos
         .iter()
@@ -27,8 +27,8 @@ fn list_repos(state: State<AppState>) -> Result<Vec<RepoMeta>, String> {
         .collect())
 }
 
-#[tauri::command]
-fn add_repo_local(app: AppHandle, state: State<AppState>, path: String) -> Result<RepoMeta, String> {
+#[tauri::command(async)]
+fn add_repo_local(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<RepoMeta, String> {
     let p = PathBuf::from(&path);
     if !p.join(".git").exists() {
         return Err("所选目录不是 git 仓库(缺少 .git)".into());
@@ -60,7 +60,7 @@ fn add_repo_local(app: AppHandle, state: State<AppState>, path: String) -> Resul
 /// 从文库列表移除一条记录。**只摘注册表,不删磁盘上的任何文件**——
 /// 克隆来的仓库也一样保留在原处,用户想彻底删除请自行删目录。
 #[tauri::command]
-fn remove_repo(app: AppHandle, state: State<AppState>, repo_id: String) -> Result<(), String> {
+fn remove_repo(app: AppHandle, state: State<'_, AppState>, repo_id: String) -> Result<(), String> {
     let mut repos = state.repos.lock().map_err(|e| e.to_string())?;
     let before = repos.len();
     repos.retain(|r| r.id != repo_id);
@@ -70,10 +70,10 @@ fn remove_repo(app: AppHandle, state: State<AppState>, repo_id: String) -> Resul
     state::save_repos(&app, &repos)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn add_repo_clone(
     app: AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     url: String,
     token: Option<String>,
 ) -> Result<RepoMeta, String> {
@@ -134,8 +134,8 @@ struct OpenedPath {
 }
 
 /// 双击/「打开方式」进入的单文件:以文件所在目录建临时文库(不持久化,复用同目录条目)
-#[tauri::command]
-fn open_path(state: State<AppState>, path: String) -> Result<OpenedPath, String> {
+#[tauri::command(async)]
+fn open_path(state: State<'_, AppState>, path: String) -> Result<OpenedPath, String> {
     let abs = std::path::PathBuf::from(&path);
     if !abs.is_file() {
         return Err(format!("文件不存在: {path}"));
@@ -178,7 +178,7 @@ fn open_path(state: State<AppState>, path: String) -> Result<OpenedPath, String>
 
 /// 取出本次进程启动时随命令行传入的 md 文件路径(消费一次)
 #[tauri::command]
-fn take_launch_file(state: State<AppState>) -> Option<String> {
+fn take_launch_file(state: State<'_, AppState>) -> Option<String> {
     state.launch_file.lock().ok()?.take()
 }
 
@@ -222,7 +222,7 @@ fn open_new_window(_app: AppHandle, _target: state::WindowTarget) -> Result<(), 
 /// 取走本窗口开机要打开的目标(只能取一次)。主窗口通常没有,返回 null。
 #[tauri::command]
 fn take_window_target(
-    state: State<AppState>,
+    state: State<'_, AppState>,
     window: tauri::Window,
 ) -> Result<Option<state::WindowTarget>, String> {
     let mut map = state.window_targets.lock().map_err(|e| e.to_string())?;
@@ -236,27 +236,27 @@ fn pick_md_from_args<I: IntoIterator<Item = String>>(args: I) -> Option<String> 
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_tree(app: AppHandle, repo_id: String) -> Result<Vec<fsops::TreeNode>, String> {
     let root = state::repo_path(&app, &repo_id)?;
     fsops::build_tree(&root, "")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_file(app: AppHandle, repo_id: String, path: String) -> Result<fsops::FileContent, String> {
     let root = state::repo_path(&app, &repo_id)?;
     let abs = state::resolve_in_repo(&root, &path)?;
     fsops::read_file(&abs)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn write_file(app: AppHandle, repo_id: String, path: String, content: String) -> Result<(), String> {
     let root = state::repo_path(&app, &repo_id)?;
     let abs = state::resolve_in_repo(&root, &path)?;
     fsops::write_file(&abs, &content)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn write_binary(app: AppHandle, repo_id: String, path: String, base64: String) -> Result<(), String> {
     use base64::Engine;
     let root = state::repo_path(&app, &repo_id)?;
@@ -271,7 +271,7 @@ fn write_binary(app: AppHandle, repo_id: String, path: String, base64: String) -
 }
 
 /// 新建空文档(父目录自动创建;已存在则拒绝)
-#[tauri::command]
+#[tauri::command(async)]
 fn create_file(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
     let root = state::repo_path(&app, &repo_id)?;
     let abs = state::resolve_in_repo(&root, &path)?;
@@ -285,7 +285,7 @@ fn create_file(app: AppHandle, repo_id: String, path: String) -> Result<(), Stri
 }
 
 /// 新建文件夹;内置 .gitkeep 占位(空目录进不了 git,多端同步会丢)
-#[tauri::command]
+#[tauri::command(async)]
 fn create_dir(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
     let root = state::repo_path(&app, &repo_id)?;
     let abs = state::resolve_in_repo(&root, &path)?;
@@ -297,7 +297,7 @@ fn create_dir(app: AppHandle, repo_id: String, path: String) -> Result<(), Strin
 }
 
 /// 重命名文件或文件夹(仓库内移动)
-#[tauri::command]
+#[tauri::command(async)]
 fn rename_entry(app: AppHandle, repo_id: String, from: String, to: String) -> Result<(), String> {
     let root = state::repo_path(&app, &repo_id)?;
     let src = state::resolve_in_repo(&root, &from)?;
@@ -315,7 +315,7 @@ fn rename_entry(app: AppHandle, repo_id: String, from: String, to: String) -> Re
 }
 
 /// 删除文件或文件夹(文件夹递归删除);不允许删仓库根
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_entry(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
     if path.trim().is_empty() {
         return Err("不能删除仓库根目录".into());
@@ -332,19 +332,19 @@ fn delete_entry(app: AppHandle, repo_id: String, path: String) -> Result<(), Str
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn git_status(app: AppHandle, repo_id: String) -> Result<gitops::GitStatusOut, String> {
     let root = state::repo_path(&app, &repo_id)?;
     gitops::status(&root)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn git_pull(app: AppHandle, repo_id: String) -> Result<gitops::GitOpResult, String> {
     let root = state::repo_path(&app, &repo_id)?;
     gitops::pull(&root, state::load_tokens(&app))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn git_sync(
     app: AppHandle,
     repo_id: String,
@@ -358,14 +358,14 @@ fn git_sync(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn git_pull_force(app: AppHandle, repo_id: String) -> Result<gitops::GitOpResult, String> {
     let root = state::repo_path(&app, &repo_id)?;
     gitops::pull_force(&root, state::load_tokens(&app))
 }
 
 /// 撤销单个文件的本地修改(未跟踪文件=直接删除)
-#[tauri::command]
+#[tauri::command(async)]
 fn git_discard_file(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
     let root = state::repo_path(&app, &repo_id)?;
     // 仅作路径越界校验
@@ -373,7 +373,7 @@ fn git_discard_file(app: AppHandle, repo_id: String, path: String) -> Result<(),
     gitops::discard_file(&root, &path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn search_repo(app: AppHandle, repo_id: String, query: String) -> Result<Vec<fsops::SearchHit>, String> {
     let root = state::repo_path(&app, &repo_id)?;
     if query.trim().is_empty() {
@@ -383,7 +383,7 @@ fn search_repo(app: AppHandle, repo_id: String, query: String) -> Result<Vec<fso
 }
 
 /// 导出文件到用户经保存对话框选择的任意路径(仓库外)
-#[tauri::command]
+#[tauri::command(async)]
 fn export_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))
 }
@@ -458,7 +458,7 @@ struct DirListing {
 }
 
 /// 应用内目录浏览器:列出子目录(Android 没有可用的系统目录选择器)
-#[tauri::command]
+#[tauri::command(async)]
 fn list_dirs(path: String) -> Result<DirListing, String> {
     let p = PathBuf::from(&path);
     if !p.is_dir() {

@@ -1023,10 +1023,17 @@ onMounted(async () => {
   if (isTauri) {
     void setupTauriFileOpen()
   }
+  // 启动自动拉取:不 await —— 墨阅首先是个离线阅读器,联网同步不该挡在阅读前面。
+  // 离线时直接跳过(libgit2 没有连接超时可设,断网发起 fetch 会干等到系统级超时)
   if (settings.autoPull && repo.currentRepoId) {
-    const r = await repo.pull()
-    if (r.ok && r.changed) toast('文档已更新到最新')
-    else if (!r.ok) toast(`自动拉取失败:${r.message}`, true)
+    if (navigator.onLine === false) {
+      console.info('[inkread] 当前离线,跳过启动自动拉取')
+    } else {
+      void repo.pull().then((r) => {
+        if (r.ok && r.changed) toast('文档已更新到最新')
+        else if (!r.ok) toast(`自动拉取失败:${r.message}`, true)
+      })
+    }
   }
 })
 

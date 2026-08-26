@@ -1,8 +1,9 @@
 <template>
   <div class="topbar">
     <button class="tbtn" title="文库 (Ctrl+B)" @click="emit('toggle-side')"><Icon name="menu" /></button>
-    <button class="tbtn" title="后退 (Alt+←)" :disabled="!canBack" @click="emit('back')"><Icon name="back" /></button>
-    <button class="tbtn" title="前进 (Alt+→)" :disabled="!canForward" @click="emit('forward')"><Icon name="forward" /></button>
+    <!-- 前进/后退仅桌面:手机有系统返回手势,顶栏寸土寸金 -->
+    <button class="tbtn hide-narrow" title="后退 (Alt+←)" :disabled="!canBack" @click="emit('back')"><Icon name="back" /></button>
+    <button class="tbtn hide-narrow" title="前进 (Alt+→)" :disabled="!canForward" @click="emit('forward')"><Icon name="forward" /></button>
     <button class="tbtn" title="搜索 (Ctrl+P 文件 / Ctrl+Shift+F 全文)" @click="emit('open-palette')"><Icon name="search" /></button>
     <div class="crumbs">
       <span class="seg">{{ repoName }}</span>

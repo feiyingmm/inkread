@@ -1478,7 +1478,13 @@ button {
   .crumbs .sep {
     display: none;
   }
+  /* 手机端正文自适应铺满:书卷版心是桌面上为了控制每行字数才存在的,
+     窄屏本来就一行放不了几个字,再压版心只剩更窄。这里取消宽度上限,
+     只留一点点呼吸边距(顶栏的宽度切换按钮在窄屏也不显示,不需要用户手动切) */
+  .prose {
+    max-width: none;
+  }
   .prose-wrap {
-    padding: 20px 18px 70px;
+    padding: 16px 12px 70px;
   }
 }
