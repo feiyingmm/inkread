@@ -1,6 +1,6 @@
 [package]
 name = "inkread"
-version = "0.3.0"
+version = "0.3.1"
 description = "墨阅 —— 跨平台 Markdown 阅读应用"
 authors = ["mahonggeng"]
 edition = "2021"
