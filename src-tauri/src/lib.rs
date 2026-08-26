@@ -564,6 +564,16 @@ fn serve_repo_asset(app: &AppHandle, uri_path: &str) -> Result<(Vec<u8>, &'stati
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Android 上「添加本地 git 仓库」指向 /sdcard,那里的文件不属于 App 的 uid,
+    // libgit2 的属主校验(等价 git 的 safe.directory 保护)会直接拒绝打开仓库,
+    // 导致状态条/拉取/提交/变更面板全部不可用。文库目录是用户在应用内亲手选的,
+    // 不存在"误入他人仓库"的风险,故在 Android 关掉该校验。
+    // 桌面端仓库属主正常,保持默认校验不动。
+    #[cfg(target_os = "android")]
+    unsafe {
+        let _ = git2::opts::set_verify_owner_validation(false);
+    }
+
     let builder = tauri::Builder::default();
 
     // 单实例:再次双击 md 文件时复用已开窗口(仅桌面)
