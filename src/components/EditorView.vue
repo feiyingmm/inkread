@@ -113,7 +113,9 @@ onMounted(async () => {
         'headings', 'bold', 'italic', 'strike', 'link', '|',
         'list', 'ordered-list', 'check', '|',
         'quote', 'code', 'inline-code', 'table', '|',
-        'undo', 'redo', 'outline',
+        'undo', 'redo', 'outline', '|',
+        // 即时渲染下代码块需点进代码区才能编辑;切到「分屏预览」可直接改源码
+        'edit-mode',
       ],
       counter: { enable: false },
       upload: {

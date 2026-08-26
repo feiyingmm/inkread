@@ -6,6 +6,7 @@
           class="tree-row"
           :class="{ 'is-dir': n.type === 'dir', 'is-active': n.path === current }"
           @click="onClick(n)"
+          @contextmenu.prevent="emit('menu', n, $event.clientX, $event.clientY)"
         >
           <span v-if="n.type === 'dir'" class="tw" :class="{ 'is-open': open[n.path] }">
             <Icon name="chevron-right" :size="12" />
@@ -21,6 +22,7 @@
             :reveal="reveal"
             :depth="depth + 1"
             @open="emit('open', $event)"
+            @menu="(node, x, y) => emit('menu', node, x, y)"
           />
         </div>
       </div>
@@ -43,7 +45,7 @@ const props = withDefaults(
   { depth: 0, reveal: '' },
 )
 
-const emit = defineEmits<{ open: [node: TreeNode] }>()
+const emit = defineEmits<{ open: [node: TreeNode]; menu: [node: TreeNode, x: number, y: number] }>()
 
 const open = reactive<Record<string, boolean>>({})
 

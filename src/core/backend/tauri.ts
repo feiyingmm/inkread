@@ -27,4 +27,7 @@ export const tauriBackend: Backend = {
   addRepoLocal: (path) => invoke<RepoMeta>('add_repo_local', { path }),
   addRepoClone: (url, token) => invoke<RepoMeta>('add_repo_clone', { url, token }),
   saveToken: (host, token) => invoke<void>('save_token', { host, token }),
+  createFile: (repoId, path) => invoke<void>('create_file', { repoId, path }),
+  createDir: (repoId, path) => invoke<void>('create_dir', { repoId, path }),
+  deleteEntry: (repoId, path) => invoke<void>('delete_entry', { repoId, path }),
 }

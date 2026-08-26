@@ -41,9 +41,15 @@
           <div v-if="repo.error" class="tree-empty">{{ repo.error }}</div>
           <div v-else-if="repo.loading" class="tree-empty">加载中…</div>
           <div v-else-if="repo.tree.length === 0" class="tree-empty">仓库为空</div>
-          <FileTree v-else :nodes="repo.tree" :current="currentPath" :reveal="treeReveal" @open="onOpenNode" />
+          <FileTree v-else :nodes="repo.tree" :current="currentPath" :reveal="treeReveal" @open="onOpenNode" @menu="onTreeMenu" />
         </div>
         <div class="side-foot">
+          <button class="tbtn" title="新建文档" :disabled="!repo.currentRepoId" @click="startCreate('file', dirOf(currentPath))">
+            <Icon name="doc-plus" />
+          </button>
+          <button class="tbtn" title="新建文件夹" :disabled="!repo.currentRepoId" @click="startCreate('dir', dirOf(currentPath))">
+            <Icon name="folder-plus" />
+          </button>
           <button class="tbtn" title="拉取最新 (git pull)" :disabled="repo.pulling" @click="doPull">
             <Icon name="refresh" :spin="repo.pulling" />
           </button>
@@ -185,11 +191,56 @@
       @jump="onTocJump"
       @close="tocSheetOpen = false"
     />
+
+    <!-- 文件树右键/长按菜单(桌面浮动,手机底部卡) -->
+    <template v-if="entryMenu">
+      <div class="ctx-mask" @click="entryMenu = null" @contextmenu.prevent="entryMenu = null"></div>
+      <div class="ctx-menu" :style="ctxStyle">
+        <div class="ctx-title">{{ entryMenu.node.name }}</div>
+        <template v-if="entryMenu.node.type === 'dir'">
+          <button class="repo-item" @click="startCreate('file', entryMenu.node.path)">
+            <span class="ri-icon"><Icon name="doc-plus" :size="15" /></span>在此新建文档…
+          </button>
+          <button class="repo-item" @click="startCreate('dir', entryMenu.node.path)">
+            <span class="ri-icon"><Icon name="folder-plus" :size="15" /></span>在此新建文件夹…
+          </button>
+          <div class="repo-menu-sep"></div>
+          <button class="repo-item ctx-danger" @click="doDelete(entryMenu.node)">
+            <span class="ri-icon"><Icon name="trash" :size="15" /></span>删除文件夹…
+          </button>
+        </template>
+        <button v-else class="repo-item ctx-danger" @click="doDelete(entryMenu.node)">
+          <span class="ri-icon"><Icon name="trash" :size="15" /></span>删除文件…
+        </button>
+      </div>
+    </template>
+
+    <!-- 新建文档 / 文件夹 -->
+    <div v-if="newDialog" class="mask mask--center mask--sheet" @click.self="newDialog = null">
+      <div class="ne-card">
+        <h3>{{ newDialog.kind === 'file' ? '新建文档' : '新建文件夹' }}</h3>
+        <div class="ne-dir" :title="newDialog.dir || '(仓库根目录)'">位于:{{ newDialog.dir || '(仓库根目录)' }}</div>
+        <input
+          ref="newNameEl"
+          v-model="newName"
+          class="palette-input ne-input"
+          :placeholder="newDialog.kind === 'file' ? '文档名,如 读书笔记.md' : '文件夹名'"
+          @keydown.enter="doCreate"
+          @keydown.esc="newDialog = null"
+        />
+        <div class="set-row" style="justify-content: flex-end; margin-top: 14px">
+          <button class="opt" @click="newDialog = null">取消</button>
+          <button class="opt is-on" :disabled="!newName.trim() || creating" @click="doCreate">
+            {{ creating ? '创建中…' : '创建' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FileTree from '@/components/FileTree.vue'
 import TopBar from '@/components/TopBar.vue'
@@ -278,6 +329,75 @@ watch(chromeHidden, (hidden) => {
 function onCrumb(dirPath: string): void {
   sideOpen.value = true
   treeReveal.value = dirPath
+}
+
+// ---- 文件管理:新建文档 / 新建文件夹 / 删除 ----
+const entryMenu = ref<null | { node: TreeNode; x: number; y: number }>(null)
+const newDialog = ref<null | { kind: 'file' | 'dir'; dir: string }>(null)
+const newName = ref('')
+const newNameEl = ref<HTMLInputElement | null>(null)
+const creating = ref(false)
+
+/** 桌面浮动菜单跟随指针并防出界;手机由 CSS 固定为底部卡 */
+const ctxStyle = computed(() => {
+  if (!entryMenu.value || isNarrow.value) return undefined
+  const x = Math.min(entryMenu.value.x, window.innerWidth - 240)
+  const y = Math.min(entryMenu.value.y, window.innerHeight - 190)
+  return { left: `${x}px`, top: `${y}px` }
+})
+
+function onTreeMenu(node: TreeNode, x: number, y: number): void {
+  entryMenu.value = { node, x, y }
+}
+
+function startCreate(kind: 'file' | 'dir', dir: string): void {
+  entryMenu.value = null
+  newDialog.value = { kind, dir }
+  newName.value = ''
+  void nextTick(() => newNameEl.value?.focus())
+}
+
+async function doCreate(): Promise<void> {
+  if (!newDialog.value || creating.value) return
+  let name = newName.value.trim().replace(/^[/\\]+|[/\\]+$/g, '')
+  if (!name) return
+  const { kind, dir } = newDialog.value
+  if (kind === 'file' && !/\.[a-z0-9]+$/i.test(name)) name += '.md'
+  const full = dir ? `${dir}/${name}` : name
+  creating.value = true
+  try {
+    if (kind === 'file') await backend.createFile(repo.currentRepoId, full)
+    else await backend.createDir(repo.currentRepoId, full)
+    newDialog.value = null
+    await repo.refresh()
+    treeReveal.value = kind === 'file' ? dir : full
+    if (kind === 'file') openFile(full)
+    toast(kind === 'file' ? '文档已创建' : '文件夹已创建')
+    repo.refreshStatus()
+  } catch (e) {
+    toast(typeof e === 'string' ? e : (e as Error).message, true)
+  } finally {
+    creating.value = false
+  }
+}
+
+async function doDelete(node: TreeNode): Promise<void> {
+  entryMenu.value = null
+  const label = node.type === 'dir' ? `文件夹「${node.name}」及其全部内容` : `文件「${node.name}」`
+  if (!window.confirm(`确定删除${label}?此操作不可恢复(已推送过的内容可从 git 历史找回)。`)) return
+  try {
+    await backend.deleteEntry(repo.currentRepoId, node.path)
+    toast('已删除')
+    // 当前打开的文档被删(或在被删目录内)时回到欢迎页
+    if (currentPath.value === node.path || currentPath.value.startsWith(node.path + '/')) {
+      editMode.value = false
+      await router.replace({ query: {} })
+    }
+    await repo.refresh()
+    repo.refreshStatus()
+  } catch (e) {
+    toast(typeof e === 'string' ? e : (e as Error).message, true)
+  }
 }
 
 async function doExport(type: 'html' | 'print'): Promise<void> {

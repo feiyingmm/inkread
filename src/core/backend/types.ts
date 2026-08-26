@@ -77,4 +77,10 @@ export interface Backend {
   addRepoClone(url: string, token?: string): Promise<RepoMeta>
   /** 保存/更新某 host 的访问令牌(空 token 表示删除) */
   saveToken(host: string, token: string): Promise<void>
+  /** 新建空文档(父目录自动创建;已存在则报错) */
+  createFile(repoId: string, path: string): Promise<void>
+  /** 新建文件夹(内置 .gitkeep 占位,保证空目录能进 git 同步) */
+  createDir(repoId: string, path: string): Promise<void>
+  /** 删除文件或文件夹(文件夹递归删除,不可恢复) */
+  deleteEntry(repoId: string, path: string): Promise<void>
 }

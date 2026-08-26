@@ -74,6 +74,15 @@ const ICONS: Record<string, IconDef> = {
   plus: { paths: ['M12 5v14', 'M5 12h14'] },
   download: { paths: ['M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2', 'M7 11l5 5 5-5', 'M12 16V4'] },
   doc: { paths: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 3v5h5'] },
+  'doc-plus': {
+    paths: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z', 'M14 3v5h5', 'M12 12v6', 'M9 15h6'],
+  },
+  'folder-plus': {
+    paths: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M12 10.5v5', 'M9.5 13h5'],
+  },
+  trash: {
+    paths: ['M3 6h18', 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6', 'M10 11v6', 'M14 11v6'],
+  },
   'chevron-up': { paths: ['M6 15l6-6 6 6'] },
   'chevron-down': { paths: ['M6 9l6 6 6-6'] },
   'chevron-right': { paths: ['M9 6l6 6-6 6'] },

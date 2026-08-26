@@ -218,6 +218,69 @@ button {
   margin: 6px 4px;
 }
 
+/* ---------- 文件树右键/长按菜单 ---------- */
+.ctx-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 46;
+}
+.ctx-menu {
+  position: fixed;
+  z-index: 47;
+  width: 224px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 6px;
+}
+.ctx-title {
+  font-size: 11.5px;
+  color: var(--t3);
+  padding: 5px 10px 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ctx-danger {
+  color: #b04a4a;
+}
+.ctx-danger .ri-icon {
+  color: inherit;
+}
+:root[data-mode='dark'] .ctx-danger {
+  color: #e08585;
+}
+
+/* ---------- 新建文档/文件夹对话框 ---------- */
+.ne-card {
+  width: min(400px, calc(100vw - 48px));
+  margin-top: 110px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 20px 22px;
+}
+.ne-card h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  color: var(--t1);
+}
+.ne-dir {
+  font-size: 12px;
+  color: var(--t3);
+  font-family: var(--font-mono);
+  margin-bottom: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ne-input {
+  width: 100%;
+}
+
 .help-table {
   width: 100%;
   font-size: 12.5px;
@@ -1272,6 +1335,53 @@ button {
     font-size: 16px;
     padding: 13px 12px;
     border-radius: var(--radius);
+  }
+
+  /* 文件树长按菜单:手机同样走底部卡 */
+  .ctx-mask {
+    background: rgba(8, 15, 24, 0.45);
+  }
+  .ctx-menu {
+    left: 0 !important;
+    right: 0;
+    top: auto !important;
+    bottom: 0;
+    width: auto;
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
+    padding: 12px 14px calc(16px + var(--safe-bottom));
+    animation: sheet-up 0.22s ease;
+  }
+  .ctx-title {
+    font-size: 13px;
+    padding: 2px 12px 10px;
+  }
+
+  /* 新建对话框:贴底抽屉 */
+  .ne-card {
+    margin: 0;
+    width: 100vw;
+    border: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
+    padding: 20px 18px calc(18px + var(--safe-bottom));
+    animation: sheet-up 0.22s ease;
+  }
+  .ne-card h3 {
+    font-size: 17px;
+    text-align: center;
+  }
+  .ne-dir {
+    text-align: center;
+  }
+  .ne-input {
+    height: 46px;
+    font-size: 15px;
+  }
+  .ne-card .opt {
+    height: 40px;
+    font-size: 14px;
   }
 
   .side {

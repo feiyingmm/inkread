@@ -210,6 +210,50 @@ fn write_binary(app: AppHandle, repo_id: String, path: String, base64: String) -
     std::fs::write(&abs, bytes).map_err(|e| format!("写入失败: {e}"))
 }
 
+/// 新建空文档(父目录自动创建;已存在则拒绝)
+#[tauri::command]
+fn create_file(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
+    let root = state::repo_path(&app, &repo_id)?;
+    let abs = state::resolve_in_repo(&root, &path)?;
+    if abs.exists() {
+        return Err("同名文件已存在".into());
+    }
+    if let Some(parent) = abs.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&abs, "").map_err(|e| format!("创建失败: {e}"))
+}
+
+/// 新建文件夹;内置 .gitkeep 占位(空目录进不了 git,多端同步会丢)
+#[tauri::command]
+fn create_dir(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
+    let root = state::repo_path(&app, &repo_id)?;
+    let abs = state::resolve_in_repo(&root, &path)?;
+    if abs.exists() {
+        return Err("同名目录已存在".into());
+    }
+    std::fs::create_dir_all(&abs).map_err(|e| format!("创建失败: {e}"))?;
+    std::fs::write(abs.join(".gitkeep"), "").map_err(|e| e.to_string())
+}
+
+/// 删除文件或文件夹(文件夹递归删除);不允许删仓库根
+#[tauri::command]
+fn delete_entry(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("不能删除仓库根目录".into());
+    }
+    let root = state::repo_path(&app, &repo_id)?;
+    let abs = state::resolve_in_repo(&root, &path)?;
+    if !abs.exists() {
+        return Err("目标不存在".into());
+    }
+    if abs.is_dir() {
+        std::fs::remove_dir_all(&abs).map_err(|e| format!("删除失败: {e}"))
+    } else {
+        std::fs::remove_file(&abs).map_err(|e| format!("删除失败: {e}"))
+    }
+}
+
 #[tauri::command]
 fn git_status(app: AppHandle, repo_id: String) -> Result<gitops::GitStatusOut, String> {
     let root = state::repo_path(&app, &repo_id)?;
@@ -533,6 +577,9 @@ pub fn run() {
             read_file,
             write_file,
             write_binary,
+            create_file,
+            create_dir,
+            delete_entry,
             git_status,
             git_pull,
             git_pull_force,

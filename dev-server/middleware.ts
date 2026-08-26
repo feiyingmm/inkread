@@ -57,11 +57,17 @@ function assembleTree(files: string[]): TreeNode[] {
   }
 
   for (const f of files) {
-    // 任一路径段以 . 开头(.github/.claude/.obsidian 等)不进文档树
-    if (f.split('/').some((seg) => seg.startsWith('.'))) continue
     const name = f.slice(f.lastIndexOf('/') + 1)
     const i = f.lastIndexOf('/')
-    const siblings = ensureDir(i < 0 ? '' : f.slice(0, i))
+    const dir = i < 0 ? '' : f.slice(0, i)
+    // 目录段以 . 开头(.github/.claude/.obsidian 等)整条不进文档树
+    if (dir.split('/').some((seg) => seg.startsWith('.'))) continue
+    // .gitkeep 是空目录占位:目录挂进树,文件本身不显示;其余点文件跳过
+    if (name.startsWith('.')) {
+      if (name === '.gitkeep') ensureDir(dir)
+      continue
+    }
+    const siblings = ensureDir(dir)
     siblings.push({ name, path: f, type: 'file', ext: path.extname(name).slice(1).toLowerCase() })
   }
   sortNodes(rootNodes)
@@ -254,6 +260,30 @@ export function inkreadDevServer(): Plugin {
               const q = url.searchParams.get('q') ?? ''
               if (!q.trim()) return json(res, [])
               return json(res, await searchRepo(repo, q.trim()))
+            }
+            case '/create-file': {
+              const abs = resolveInRepo(repo, relPath)
+              if (fs.existsSync(abs)) return json(res, { error: '同名文件已存在' }, 409)
+              await fsp.mkdir(path.dirname(abs), { recursive: true })
+              await fsp.writeFile(abs, '', 'utf-8')
+              return json(res, { ok: true })
+            }
+            case '/create-dir': {
+              const abs = resolveInRepo(repo, relPath)
+              if (fs.existsSync(abs)) return json(res, { error: '同名目录已存在' }, 409)
+              await fsp.mkdir(abs, { recursive: true })
+              // 空目录进不了 git,放置占位文件保证多端同步不丢目录
+              await fsp.writeFile(path.join(abs, '.gitkeep'), '', 'utf-8')
+              return json(res, { ok: true })
+            }
+            case '/delete': {
+              if (!relPath.trim()) return json(res, { error: '不能删除仓库根目录' }, 400)
+              const abs = resolveInRepo(repo, relPath)
+              if (!fs.existsSync(abs)) return json(res, { error: '目标不存在' }, 404)
+              const stat = await fsp.stat(abs)
+              if (stat.isDirectory()) await fsp.rm(abs, { recursive: true })
+              else await fsp.unlink(abs)
+              return json(res, { ok: true })
             }
             default:
               next()
