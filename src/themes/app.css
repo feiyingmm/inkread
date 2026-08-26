@@ -85,6 +85,19 @@ button {
   transition: background 0.25s ease;
 }
 
+/* 三列必须显式定位:手机上 .side 变成绝对定位抽屉、.toc 被隐藏后,
+   若靠自动排布,.main 会落进第 1 列(auto)按内容宽度收缩,空着的 1fr 列
+   吃掉剩余宽度 —— 表现为正文整体左移、右侧一条白边 */
+.side {
+  grid-column: 1;
+}
+.main {
+  grid-column: 2;
+}
+.toc {
+  grid-column: 3;
+}
+
 /* ---------- 侧栏(文件树) ---------- */
 .side {
   width: 264px;
