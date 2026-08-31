@@ -9,6 +9,9 @@
       <button class="sn-btn" title="清除高亮" @click="clearSearch()"><Icon name="close" :size="15" /></button>
     </div>
 
+    <!-- 长表格的浮动表头:滚过表头后另画一份钉在内容区顶部(见 core/markdown/enhance.ts) -->
+    <div ref="floatHeadEl" class="table-float-head" hidden></div>
+
     <div class="prose-wrap">
       <div v-if="errorMsg" class="doc-error">{{ errorMsg }}</div>
       <div
@@ -35,8 +38,11 @@ import { errMsg } from '@/core/errmsg'
 import { useBackLayerWhen } from '@/core/backstack'
 import { backend } from '@/core/backend'
 import { dirOf, extOf, fileKind } from '@/core/paths'
-import { renderMarkdown, renderPlainText, type TocItem } from '@/core/markdown/pipeline'
+import { highlightCode, renderMarkdown, renderPlainText, type TocItem } from '@/core/markdown/pipeline'
+import { formatJson } from '@/core/json-format'
 import { transformInfoCards } from '@/core/markdown/infocard'
+import { buildFloatHead, headingText, markTallTables, setupCodeBlocks, setupHeadingAnchors } from '@/core/markdown/enhance'
+import { copyText } from '@/core/clipboard'
 import { renderMermaidBlocks } from '@/core/markdown/mermaid'
 import { useSettings } from '@/stores/settings'
 import { toast } from '@/core/toast'
@@ -60,6 +66,7 @@ const settings = useSettings()
 
 const scroller = ref<HTMLElement | null>(null)
 const proseEl = ref<HTMLElement | null>(null)
+const floatHeadEl = ref<HTMLElement | null>(null)
 const html = ref('')
 const errorMsg = ref('')
 const lightboxSrc = ref('')
@@ -119,7 +126,9 @@ async function load(): Promise<void> {
   emit('source-mode', false)
   emit('toc', [])
   emit('active', '')
-  if (!props.path) {
+  // 冷启动时 repoId 还没从后端回来(路由里已带 ?f=),这时读文件必然 404 ——
+  // 等 repoId 到位,watch 会再触发一次,不必先闪一下"文档读取失败"
+  if (!props.path || !props.repoId) {
     html.value = ''
     return
   }
@@ -157,13 +166,20 @@ function afterRender(): void {
     transformInfoCards(root)
     void renderMermaidBlocks(root, settings.isDark)
     setupFolding(root)
+    setupHeadingAnchors(root)
+    markTallTables(root)
     headings = Array.from(root.querySelectorAll<HTMLElement>('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]'))
   } else {
     headings = []
   }
+  setupCodeBlocks(root)
   const saved = Number(localStorage.getItem(scrollKey()) ?? 0)
   if (scroller.value) scroller.value.scrollTop = saved
+  // 换文档要丢掉上一篇的表头副本
+  floatWrap = null
+  if (floatHeadEl.value) floatHeadEl.value.hidden = true
   updateProgress()
+  updateFloatHead()
   emit('rendered')
 }
 
@@ -226,15 +242,80 @@ function unfoldFor(target: HTMLElement): void {
 function updateProgress(): void {
   const el = scroller.value
   if (!el) return
-  const max = el.scrollHeight - el.clientHeight
+  // 正文底部留了一大块空白(方便把末尾标题滚到顶部),所以进度按**正文实际结束处**算,
+  // 否则读到最后一行时进度条才走到七成
+  const prose = proseEl.value
+  const contentEnd = prose
+    ? prose.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop
+    : el.scrollHeight
+  const max = Math.min(el.scrollHeight - el.clientHeight, Math.max(0, contentEnd - el.clientHeight))
   progress.value = max > 10 ? Math.min(100, (el.scrollTop / max) * 100) : 0
   showBackTop.value = el.scrollTop > 600
+}
+
+// ---------- 长表格的浮动表头 ----------
+let floatWrap: HTMLElement | null = null
+
+/** 找到当前跨过内容区顶边的那张长表格,把它的表头副本钉在顶上 */
+function updateFloatHead(): void {
+  const box = scroller.value
+  const host = floatHeadEl.value
+  const root = proseEl.value
+  if (!box || !host) return
+  const boxRect = box.getBoundingClientRect()
+  let active: HTMLElement | null = null
+  for (const wrap of Array.from(root?.querySelectorAll<HTMLElement>('.table-wrap.has-float-head') ?? [])) {
+    const r = wrap.getBoundingClientRect()
+    // 表头已滚出上边、表格尾巴还没走完 → 就是它
+    if (r.top < boxRect.top && r.bottom > boxRect.top + 44) {
+      active = wrap
+      break
+    }
+  }
+  if (!active) {
+    floatWrap = null
+    if (!host.hidden) host.hidden = true
+    return
+  }
+  const r = active.getBoundingClientRect()
+  if (floatWrap !== active) {
+    floatWrap = active
+    const clone = buildFloatHead(active)
+    if (!clone) {
+      host.hidden = true
+      return
+    }
+    host.replaceChildren(clone)
+    // 副本挂在 .prose 外面,字体继承不到正文那套,按真表格的实测值抄过来
+    const real = active.querySelector('table')
+    if (real) {
+      const cs = getComputedStyle(real)
+      host.style.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`
+    }
+  }
+  host.hidden = false
+  host.style.top = `${boxRect.top}px`
+  host.style.left = `${r.left}px`
+  host.style.width = `${Math.min(r.width, boxRect.width)}px`
+  syncFloatHeadX()
+}
+
+/** 表格横滚时表头副本跟着平移,列才对得上 */
+function syncFloatHeadX(): void {
+  const inner = floatHeadEl.value?.firstElementChild as HTMLElement | null
+  if (inner && floatWrap) inner.style.transform = `translateX(${-floatWrap.scrollLeft}px)`
+}
+
+/** 滚动事件不冒泡,但捕获阶段能收到 —— 用它接住表格容器自己的横向滚动 */
+function onInnerScroll(e: Event): void {
+  if (floatWrap && e.target === floatWrap) syncFloatHeadX()
 }
 
 function onScroll(): void {
   const el = scroller.value
   if (!el) return
   updateProgress()
+  updateFloatHead()
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
   scrollSaveTimer = setTimeout(() => {
     if (el.scrollTop > 40) localStorage.setItem(scrollKey(), String(el.scrollTop))
@@ -319,6 +400,58 @@ function stepHit(dir: number): void {
   applyHit(n)
 }
 
+// ---------- json 代码块格式化 ----------
+/** code 元素 → 格式化前的原始 html(切回原文用;DOM 重建后随之回收) */
+const jsonOrigHtml = new WeakMap<HTMLElement, string>()
+
+/**
+ * 「格式化 / 原文」来回切:压成一行的接口报文点一下就能读。
+ * 只动 DOM 里显示的那份,磁盘上的文档一个字都不改(阅读视图本来就是只读的)。
+ */
+function toggleJsonFormat(btn: HTMLElement): void {
+  const block = btn.closest('.code-block')
+  const pre = block?.querySelector<HTMLElement>('.code-pre')
+  const code = pre?.querySelector<HTMLElement>('code')
+  if (!pre || !code) return
+  const orig = jsonOrigHtml.get(code)
+  if (orig !== undefined) {
+    clearSearch()
+    code.innerHTML = orig
+    jsonOrigHtml.delete(code)
+    btn.textContent = '格式化'
+    btn.classList.remove('is-on')
+    btn.title = '展开成缩进格式(不改动数字精度)'
+    return
+  }
+  const r = formatJson(code.textContent ?? '')
+  if (!r.ok) {
+    toast(`这段不是合法 JSON:${r.error}`, true)
+    return
+  }
+  clearSearch()
+  jsonOrigHtml.set(code, code.innerHTML)
+  code.innerHTML = highlightCode(r.text, pre.dataset.lang || 'json')
+  btn.textContent = '原文'
+  btn.classList.add('is-on')
+  btn.title = '恢复文档里的原始写法'
+}
+
+/**
+ * 复制指向本节的 Markdown 链接。路径用**仓库内相对路径** ——
+ * claude-docs 的用法是回 INDEX.md / README.md(都在仓库根)挂链接,这份路径直接可用。
+ */
+async function copyHeadingLink(btn: HTMLElement): Promise<void> {
+  const h = btn.closest<HTMLElement>('h1,h2,h3,h4,h5,h6')
+  if (!h) return
+  const target = /\s/.test(props.path) ? `<${props.path}>` : props.path
+  try {
+    await copyText(`[${headingText(h)}](${target}#${h.id})`)
+    toast('已复制本节链接(仓库内相对路径)')
+  } catch (e) {
+    toast(`复制失败:${errMsg(e)}`, true)
+  }
+}
+
 // ---------- 点击委托 ----------
 function closeLightbox(): void {
   lightboxSrc.value = ''
@@ -337,6 +470,37 @@ function onClick(e: MouseEvent): void {
   const foldBtn = el.closest<HTMLElement>('.fold-btn')
   if (foldBtn && foldBtn.parentElement) {
     toggleFold(foldBtn.parentElement)
+    return
+  }
+
+  const anchorBtn = el.closest<HTMLElement>('.head-anchor')
+  if (anchorBtn) {
+    void copyHeadingLink(anchorBtn)
+    return
+  }
+
+  // 注意:格式化 / 折行按钮也带 .code-copy(共用样式),必须先判它们
+  const fmtBtn = el.closest<HTMLElement>('.code-fmt')
+  if (fmtBtn) {
+    toggleJsonFormat(fmtBtn)
+    return
+  }
+
+  const wrapBtn = el.closest<HTMLElement>('.code-wrap-btn')
+  if (wrapBtn) {
+    const pre = wrapBtn.closest('.code-block')?.querySelector<HTMLElement>('.code-pre')
+    const on = pre?.classList.toggle('is-wrap') ?? false
+    wrapBtn.classList.toggle('is-on', on)
+    wrapBtn.title = on ? '恢复横向滚动' : '长行折行显示(默认横向滚动)'
+    return
+  }
+
+  const moreBtn = el.closest<HTMLElement>('.code-more')
+  if (moreBtn) {
+    const block = moreBtn.closest<HTMLElement>('.code-block')
+    const clipped = block?.classList.toggle('is-clipped') ?? false
+    moreBtn.textContent = clipped ? `展开全部 ${moreBtn.dataset.lines} 行` : '收起'
+    if (!clipped) block?.scrollIntoView({ block: 'nearest' })
     return
   }
 
@@ -457,10 +621,12 @@ function onTouchEnd(): void {
 
 watch(scroller, (el, old) => {
   old?.removeEventListener('scroll', onScroll)
+  old?.removeEventListener('scroll', onInnerScroll, true)
   old?.removeEventListener('touchstart', onTouchStart)
   old?.removeEventListener('touchmove', onTouchMove)
   old?.removeEventListener('touchend', onTouchEnd)
   el?.addEventListener('scroll', onScroll, { passive: true })
+  el?.addEventListener('scroll', onInnerScroll, { passive: true, capture: true })
   el?.addEventListener('touchstart', onTouchStart, { passive: true })
   el?.addEventListener('touchmove', onTouchMove, { passive: true })
   el?.addEventListener('touchend', onTouchEnd, { passive: true })
@@ -469,6 +635,7 @@ watch(scroller, (el, old) => {
 onBeforeUnmount(() => {
   const el = scroller.value
   el?.removeEventListener('scroll', onScroll)
+  el?.removeEventListener('scroll', onInnerScroll, true)
   el?.removeEventListener('touchstart', onTouchStart)
   el?.removeEventListener('touchmove', onTouchMove)
   el?.removeEventListener('touchend', onTouchEnd)

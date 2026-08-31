@@ -5,19 +5,20 @@
     <button class="tbtn hide-narrow" title="后退 (Alt+←)" :disabled="!canBack" @click="emit('back')"><Icon name="back" /></button>
     <button class="tbtn hide-narrow" title="前进 (Alt+→)" :disabled="!canForward" @click="emit('forward')"><Icon name="forward" /></button>
     <button class="tbtn" title="搜索 (Ctrl+P 文件 / Ctrl+Shift+F 全文)" @click="emit('open-palette')"><Icon name="search" /></button>
-    <div class="crumbs">
+    <!-- 面包屑整条带 title:路径长到被截断时,悬停仍能看全 -->
+    <div class="crumbs" :title="fullPath">
       <span class="seg">{{ repoName }}</span>
       <template v-for="(seg, i) in segments" :key="i">
         <span class="sep">/</span>
         <button
           v-if="i < segments.length - 1"
           class="seg seg-link"
-          title="在文库中定位该目录"
+          :title="`在文库中定位:${segments.slice(0, i + 1).join('/')}`"
           @click="emit('crumb', segments.slice(0, i + 1).join('/'))"
         >
           {{ seg }}
         </button>
-        <span v-else class="seg">{{ seg }}</span>
+        <span v-else class="seg" :title="seg">{{ seg }}</span>
       </template>
     </div>
 
@@ -34,6 +35,14 @@
       <button :class="{ 'is-on': !editMode }" title="阅读视图 (Ctrl+E)" @click="emit('set-edit', false)">阅读</button>
       <button :class="{ 'is-on': editMode }" title="编辑模式 (Ctrl+E)" @click="emit('set-edit', true)">编辑</button>
     </div>
+    <button
+      v-if="editMode"
+      class="tbtn hide-narrow"
+      title="格式化文中的 JSON 代码块 (Ctrl+Alt+J)"
+      @click="emit('format-json')"
+    >
+      <Icon name="braces" />
+    </button>
     <button
       v-if="canEdit && !editMode"
       class="tbtn hide-narrow"
@@ -93,6 +102,7 @@ const emit = defineEmits<{
   'set-edit': [on: boolean]
   save: []
   'toggle-source': []
+  'format-json': []
   export: [type: 'html' | 'print']
   crumb: [dirPath: string]
 }>()
@@ -100,6 +110,7 @@ const emit = defineEmits<{
 const settings = useSettings()
 
 const segments = computed(() => (props.path ? props.path.split('/') : []))
+const fullPath = computed(() => [props.repoName, ...segments.value].filter(Boolean).join(' / '))
 
 const exportOpen = ref(false)
 

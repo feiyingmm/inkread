@@ -77,6 +77,13 @@ const ICONS: Record<string, IconDef> = {
     ],
   },
   code: { paths: ['M16 18l6-6-6-6', 'M8 6l-6 6 6 6'] },
+  /** JSON / 格式化(一对花括号) */
+  braces: {
+    paths: [
+      'M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1',
+      'M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1',
+    ],
+  },
   export: { paths: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'] },
   width: { paths: ['M3 12h18', 'M8 7l-5 5 5 5', 'M16 7l5 5-5 5'] },
   folder: { paths: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'] },

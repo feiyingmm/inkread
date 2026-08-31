@@ -1,7 +1,9 @@
 /* ============ 阅读排版:书卷气正文 ============ */
 
 .prose-wrap {
-  padding: 34px 44px 90px;
+  /* 底部留一屏三成(Typora / 语雀同款):最后一节标题也能被大纲滚到顶部。
+     阅读进度条已按正文实际结束位置计算,不会因为这块空白提前到不了 100% */
+  padding: 34px 44px 32vh;
 }
 
 .prose {
@@ -137,9 +139,16 @@
 }
 .meta-item {
   display: flex;
-  align-items: baseline;
+  /* 截断后的值以底边参与 baseline 对齐会错位半个像素,统一改居中 */
+  align-items: center;
   gap: 10px;
+  /* 网格列宽固定,这里必须允许收缩,否则长值会溢出格子压到右边邻居身上 */
   min-width: 0;
+  overflow: hidden;
+}
+/* 长值(长状态、长说明)独占整行:能显示的字数多几倍,省略号来得晚 */
+.meta-item--wide {
+  grid-column: 1 / -1;
 }
 .meta-key {
   color: var(--t3);
@@ -151,6 +160,9 @@
 .meta-val {
   color: var(--accent-deep);
   font-weight: 600;
+  /* flex-shrink 生效的三件套:可收缩 + 允许小于内容宽 + 单行截断 */
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -165,7 +177,10 @@
   padding: 0.05em 0.7em;
   font-size: 0.92em;
   white-space: nowrap;
-  overflow: visible;
+  /* 药丸也要能截断 —— 原来 overflow:visible 让长状态整段跑出格子 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* ---------- 表格 ---------- */
@@ -189,15 +204,32 @@
 .prose td {
   max-width: 24em;
 }
-.prose th {
+.prose th,
+.table-float-head th {
   background: var(--table-head);
   color: var(--t1);
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
 }
+
+/* 长表格的浮动表头:滚过表头之后另画一份钉在内容区顶部(见 core/markdown/enhance.ts)。
+   它挂在 .prose 外面,所以表格样式要单独点名一次(下面几条 .prose th 规则里带上它)。 */
+.table-float-head {
+  position: fixed;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  border-top: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 4px 10px -6px rgba(0, 0, 0, 0.28);
+}
+.table-float-head table {
+  border-collapse: collapse;
+}
 .prose th,
-.prose td {
+.prose td,
+.table-float-head th {
   padding: 8px 14px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
@@ -231,6 +263,11 @@
   color: var(--t3);
   text-transform: lowercase;
 }
+.code-acts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 .code-copy {
   border: none;
   background: transparent;
@@ -243,6 +280,11 @@
 .code-copy:hover {
   background: var(--bg-hover);
   color: var(--t1);
+}
+/* 已格式化的 json 块:按钮变主色,提示"当前看的不是原文" */
+.code-fmt.is-on {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
 }
 .code-pre {
   margin: 0;
@@ -259,6 +301,48 @@
 }
 .code-block--file {
   margin: 0;
+}
+/* 折行开关打开:长行折下来,不再横向滚动 */
+.code-pre.is-wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: hidden;
+}
+
+/* 超长代码块先折起来,底部一条渐隐 + 展开按钮 */
+.code-block.is-clipped {
+  position: relative;
+}
+.code-block.is-clipped .code-pre {
+  max-height: 22em;
+  /* 只夹竖向 —— 用 overflow:hidden 会连横向滚动一起关掉,长行就再也看不全了 */
+  overflow-y: hidden;
+}
+.code-block.is-clipped::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 30px;
+  height: 56px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--bg-side));
+}
+.code-more {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  background: var(--table-head);
+  color: var(--t2);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.code-more:hover {
+  color: var(--accent-deep);
+  background: var(--bg-hover);
 }
 
 /* highlight.js → CSS 变量(深浅色自动) */
@@ -398,6 +482,35 @@
   display: none !important;
 }
 
+/* 标题锚点:悬停才显形,点一下复制本节的 Markdown 链接 */
+.head-anchor {
+  border: none;
+  background: none;
+  color: var(--t3);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: 400;
+  margin-left: 0.4em;
+  padding: 0 0.2em;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  vertical-align: middle;
+}
+.prose h1:hover .head-anchor,
+.prose h2:hover .head-anchor,
+.prose h3:hover .head-anchor,
+.prose h4:hover .head-anchor,
+.prose h5:hover .head-anchor,
+.prose h6:hover .head-anchor {
+  opacity: 1;
+}
+.head-anchor:hover {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+
 /* ---------- 阅读纸色(浅色模式下生效;深色模式忽略) ---------- */
 :root[data-mode='light'][data-paper='sepia'] .content {
   background: #f7f0de;
@@ -442,7 +555,7 @@
     max-width: none;
   }
   .prose-wrap {
-    padding: 14px 10px 70px;
+    padding: 14px 10px 32vh;
   }
   /* 表格在窄屏靠容器横向滚动,单元格不必再自设上限(否则一格能吃掉整屏宽) */
   .prose td {
@@ -460,5 +573,27 @@
   }
   .fold-hidden {
     display: revert !important;
+  }
+  /* 纸上没有"悬停看全文",元信息一律折行打全 */
+  .meta-item {
+    overflow: visible;
+  }
+  .meta-val,
+  .meta-badge {
+    white-space: normal;
+    overflow: visible;
+    max-width: none;
+  }
+  /* 折起来的长代码块、限高的长表格都要打全;锚点按钮不上纸 */
+  .code-block.is-clipped .code-pre {
+    max-height: none;
+  }
+  .code-block.is-clipped::after,
+  .code-more,
+  .head-anchor {
+    display: none !important;
+  }
+  .table-wrap.is-sticky-head thead th {
+    position: static;
   }
 }

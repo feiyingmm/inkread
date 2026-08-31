@@ -103,6 +103,7 @@
           @set-edit="setEdit"
           @save="editorRef?.save()"
           @toggle-source="mdView?.toggleSource()"
+          @format-json="editorRef?.formatJsonBlocks()"
           @export="doExport"
           @crumb="onCrumb"
         />
@@ -134,6 +135,9 @@
           :path="currentPath"
           @saved="onEditorSaved"
           @dirty="editorDirty = $event"
+          @toc="toc = $event"
+          @active="activeSlug = $event"
+          @stats="docStats = $event"
         />
         <StatusBar
           :class="{ 'chrome-hidden': chromeHidden }"
@@ -141,6 +145,7 @@
           :syncing="syncing"
           :edit-mode="editMode"
           :auto-save="settings.autoSave"
+          :stats="docStats"
           @sync="doSync"
           @show-changes="changesOpen = true"
         />
@@ -351,6 +356,7 @@ import { useSettings } from '@/stores/settings'
 import { dirOf, fileKind } from '@/core/paths'
 import { resolvePath } from '@/core/paths'
 import type { TocItem } from '@/core/markdown/pipeline'
+import type { DocStats } from '@/core/doc-stats'
 import type { GitChange, TreeNode } from '@/core/backend'
 import { toast } from '@/core/toast'
 
@@ -372,6 +378,7 @@ const mdView = ref<InstanceType<typeof MarkdownView> | null>(null)
 const editorRef = ref<InstanceType<typeof EditorView> | null>(null)
 const editMode = ref(false)
 const editorDirty = ref(false)
+const docStats = ref<DocStats | null>(null)
 const syncing = ref(false)
 const issueMode = ref<'' | 'pull' | 'push'>('')
 const issueDetail = ref('')
@@ -981,8 +988,10 @@ function onRendered(): void {
   }
 }
 
+/** 大纲点击:阅读视图滚正文,编辑视图滚编辑区(两边各自实现 scrollToSlug) */
 function onTocJump(slug: string): void {
-  mdView.value?.scrollToSlug(slug)
+  if (editMode.value) editorRef.value?.scrollToSlug(slug)
+  else mdView.value?.scrollToSlug(slug)
 }
 
 async function doPull(): Promise<void> {
@@ -997,7 +1006,11 @@ async function doPull(): Promise<void> {
 
 function onKeydown(e: KeyboardEvent): void {
   const key = e.key.toLowerCase()
+  // 光标在编辑器里时,Ctrl+B 让位给「加粗」(编辑器里的肌肉记忆优先);
+  // 焦点在别处(文件树、面板)时仍是收起/展开文库栏
+  const inEditor = !!(e.target as HTMLElement | null)?.closest?.('.vditor')
   if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 'b') {
+    if (inEditor) return
     e.preventDefault()
     sideOpen.value = !sideOpen.value
   } else if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 'p') {
@@ -1006,12 +1019,24 @@ function onKeydown(e: KeyboardEvent): void {
   } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === 'f') {
     e.preventDefault()
     openPalette('search')
+  } else if (e.ctrlKey && !e.shiftKey && !e.altKey && (key === 'f' || key === 'h')) {
+    // 编辑视图内的查找 / 替换(阅读视图仍用 Ctrl+Shift+F 跨文档搜索)
+    if (editMode.value) {
+      e.preventDefault()
+      editorRef.value?.openFind(key === 'h')
+    }
   } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '/') {
     e.preventDefault()
     if (!editMode.value) void mdView.value?.toggleSource()
   } else if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 'e') {
     e.preventDefault()
     if (canEdit.value) setEdit(!editMode.value)
+  } else if (e.ctrlKey && !e.shiftKey && e.altKey && key === 'j') {
+    // 编辑视图:一键格式化文中的 json 代码块
+    if (editMode.value) {
+      e.preventDefault()
+      editorRef.value?.formatJsonBlocks()
+    }
   } else if (e.ctrlKey && !e.shiftKey && !e.altKey && key === 's') {
     if (editMode.value) {
       e.preventDefault()

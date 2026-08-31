@@ -10,8 +10,12 @@ export async function buildExportHtml(title: string, proseEl: HTMLElement): Prom
   }
 
   const clone = proseEl.cloneNode(true) as HTMLElement
-  clone.querySelectorAll('.fold-btn, .code-copy').forEach((el) => el.remove())
+  // 交互件不进导出:折叠三角、代码块按钮(复制/格式化/折行)、展开全部、标题锚点
+  clone.querySelectorAll('.fold-btn, .code-copy, .code-more, .head-anchor').forEach((el) => el.remove())
   clone.querySelectorAll('.fold-hidden').forEach((el) => el.classList.remove('fold-hidden'))
+  // 折起来的代码块、限高的长表格在静态 HTML 里要摊开,否则导出的文档缺内容
+  clone.querySelectorAll('.is-clipped').forEach((el) => el.classList.remove('is-clipped'))
+  clone.querySelectorAll('.table-wrap.is-sticky-head').forEach((el) => el.classList.remove('is-sticky-head'))
 
   const imgs = Array.from(clone.querySelectorAll('img'))
   await Promise.all(

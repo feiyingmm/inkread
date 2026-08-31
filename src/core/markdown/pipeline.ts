@@ -63,7 +63,27 @@ md.use(katex)
 
 const escapeHtml = md.utils.escapeHtml
 
-// 代码块:mermaid 走占位容器,其余 highlight.js + 语言标签 + 复制按钮
+/** 语法高亮成 html;语言不认识就纯转义 */
+export function highlightCode(source: string, lang: string): string {
+  const l = lang.toLowerCase()
+  if (l && hljs.getLanguage(l)) return hljs.highlight(source, { language: l, ignoreIllegals: true }).value
+  return escapeHtml(source)
+}
+
+/** json 家族:给这些代码块额外挂一个「格式化」按钮 */
+function isJsonLang(lang: string): boolean {
+  return lang === 'json' || lang === 'jsonc' || lang === 'json5' || lang === 'jsonl'
+}
+
+/** 代码块右上角的按钮组(json 多一个格式化) */
+function codeActions(lang: string): string {
+  const fmt = isJsonLang(lang)
+    ? `<button class="code-copy code-fmt" type="button" title="展开成缩进格式(不改动数字精度)">格式化</button>`
+    : ''
+  return `<div class="code-acts">${fmt}<button class="code-copy" type="button">复制</button></div>`
+}
+
+// 代码块:mermaid 走占位容器,其余 highlight.js + 语言标签 + 按钮组
 md.renderer.rules.fence = (tokens, idx) => {
   const token = tokens[idx]
   const lang = (token.info || '').trim().split(/\s+/)[0].toLowerCase()
@@ -71,17 +91,12 @@ md.renderer.rules.fence = (tokens, idx) => {
   if (lang === 'mermaid') {
     return `<div class="mermaid-block"><pre class="mermaid-src">${escapeHtml(code)}</pre><div class="mermaid-target"></div></div>\n`
   }
-  let body: string
-  if (lang && hljs.getLanguage(lang)) {
-    body = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value
-  } else {
-    body = escapeHtml(code)
-  }
   return (
     `<div class="code-block">` +
     `<div class="code-head"><span class="code-lang">${escapeHtml(lang || 'text')}</span>` +
-    `<button class="code-copy" type="button">复制</button></div>` +
-    `<pre class="code-pre"><code>${body}</code></pre></div>\n`
+    codeActions(lang) +
+    `</div>` +
+    `<pre class="code-pre" data-lang="${escapeHtml(lang)}"><code>${highlightCode(code, lang)}</code></pre></div>\n`
   )
 }
 
@@ -116,16 +131,11 @@ export function renderMarkdown(source: string, ctx: RenderCtx): RenderResult {
 
 /** 纯文本附件(sql/json/…)渲染为只读代码视图 */
 export function renderPlainText(source: string, ext: string): string {
-  let body: string
-  if (ext && hljs.getLanguage(ext)) {
-    body = hljs.highlight(source, { language: ext, ignoreIllegals: true }).value
-  } else {
-    body = escapeHtml(source)
-  }
   return (
     `<div class="code-block code-block--file">` +
     `<div class="code-head"><span class="code-lang">${escapeHtml(ext || 'text')}</span>` +
-    `<button class="code-copy" type="button">复制</button></div>` +
-    `<pre class="code-pre"><code>${body}</code></pre></div>`
+    codeActions(ext.toLowerCase()) +
+    `</div>` +
+    `<pre class="code-pre" data-lang="${escapeHtml(ext)}"><code>${highlightCode(source, ext)}</code></pre></div>`
   )
 }

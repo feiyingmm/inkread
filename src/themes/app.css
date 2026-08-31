@@ -491,10 +491,20 @@ button {
 }
 .crumbs .seg {
   color: var(--t2);
+  /* 路径长了先截目录段(带省略号),而不是把整条面包屑硬切在窗口边上 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .crumbs .seg:last-child {
   color: var(--t1);
   font-weight: 600;
+  /* 文件名最该看见:比目录段晚得多才开始收缩 */
+  flex-shrink: 0.15;
+}
+.crumbs .sep {
+  flex-shrink: 0;
 }
 .crumbs .sep {
   color: var(--t3);
@@ -637,6 +647,14 @@ button {
 .sb-hint {
   color: var(--t3);
 }
+/* 编辑模式字数统计:数字等宽,打字时不左右抖 */
+.sb-stats {
+  color: var(--t2);
+  font-variant-numeric: tabular-nums;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+  margin-right: 12px;
+}
 .sb-flex {
   flex: 1;
 }
@@ -729,6 +747,11 @@ button {
   align-items: center;
   gap: 4px;
   padding: 0 4px 8px;
+  /* 大纲很长时标题与「折叠全部」不该跟着滚走 */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-side);
 }
 .toc-title {
   flex: 1;

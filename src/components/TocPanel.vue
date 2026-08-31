@@ -1,5 +1,5 @@
 <template>
-  <div class="toc" :class="{ 'is-closed': !open }">
+  <div ref="rootEl" class="toc" :class="{ 'is-closed': !open }">
     <template v-if="open">
       <div class="toc-head">
         <div class="toc-title">大纲</div>
@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 import TocTree from '@/components/TocTree.vue'
 import { ancestorSlugs, branchSlugs, buildTocTree } from '@/core/toc-tree'
@@ -43,6 +43,33 @@ const emit = defineEmits<{ jump: [slug: string] }>()
 const tree = computed(() => buildTocTree(props.items))
 const branches = computed(() => branchSlugs(tree.value))
 const trail = computed(() => ancestorSlugs(tree.value, props.activeSlug))
+
+const rootEl = ref<HTMLElement | null>(null)
+
+/**
+ * 长文档的大纲比面板高得多,当前标题很容易落在可视区外 —— 高亮了却看不见。
+ * 这里只在它确实跑出视野时才滚,滚到面板中间偏上;正在视野内就不动,免得读者
+ * 一边滚正文一边看着大纲抽动。
+ */
+watch(
+  () => [props.activeSlug, props.open] as const,
+  () => {
+    if (!props.open || !props.activeSlug) return
+    void nextTick(() => {
+      const box = rootEl.value
+      const row = box?.querySelector<HTMLElement>('.tt-row.is-active')
+      if (!box || !row) return
+      const top = row.getBoundingClientRect().top - box.getBoundingClientRect().top
+      const pad = 48
+      if (top >= pad && top <= box.clientHeight - pad) return
+      // 瞬时定位而不是平滑滚动:正文平滑滚动期间 activeSlug 会连续变几十次,
+      // 每次都启动一段平滑动画的话互相打断,读者停下来了大纲还在慢慢追
+      box.scrollTop = box.scrollTop + top - box.clientHeight * 0.35
+    })
+  },
+  // immediate:打开面板/切回阅读时,当前项本来就在视野外的话也要先亮出来
+  { immediate: true },
+)
 
 /** slug → 折叠。换文档就清空(默认全展开,不折叠是老行为) */
 const collapsed = reactive<Record<string, boolean>>({})
