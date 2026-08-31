@@ -146,10 +146,11 @@
         />
       </main>
 
+      <!-- 手机端目录走浮动球 + 整屏页(.toc 在窄屏 display:none),这里连内容都不必渲染 -->
       <TocPanel
         :items="toc"
         :active-slug="activeSlug"
-        :open="tocOpen && toc.length > 0"
+        :open="tocOpen && toc.length > 0 && !isNarrow"
         :style="tocStyle"
         @jump="onTocJump"
       />
@@ -237,6 +238,10 @@
         </template>
         <template v-if="entryMenu.node">
           <div class="repo-menu-sep"></div>
+          <button class="repo-item" @click="showEntryInfo(entryMenu.node)">
+            <span class="ri-icon"><Icon name="info" :size="15" /></span>
+            {{ entryMenu.node.type === 'dir' ? '文件夹信息…' : '文件信息…' }}
+          </button>
           <!-- Android 没有通用的「定位到文件」入口,只在桌面提供 -->
           <button v-if="isTauri && !isAndroid" class="repo-item" @click="revealEntry(entryMenu.node)">
             <span class="ri-icon"><Icon name="folder-open" :size="15" /></span>打开所在目录
@@ -302,6 +307,15 @@
       </template>
     </MobilePage>
 
+    <!-- 文件 / 文件夹信息 -->
+    <FileInfoDialog
+      v-if="infoNode"
+      :repo-id="repo.currentRepoId"
+      :node="infoNode"
+      :changes="repo.status?.changes ?? []"
+      @close="infoNode = null"
+    />
+
     <!-- 首次启动的存储权限引导(Android 未授权时) -->
     <StoragePermPage v-if="permPageOpen" @close="permPageOpen = false" />
   </div>
@@ -324,6 +338,7 @@ import CloneDialog from '@/components/CloneDialog.vue'
 import LocalPathDialog from '@/components/LocalPathDialog.vue'
 import MobileTocSheet from '@/components/MobileTocSheet.vue'
 import ChangesPanel from '@/components/ChangesPanel.vue'
+import FileInfoDialog from '@/components/FileInfoDialog.vue'
 import MobilePage from '@/components/MobilePage.vue'
 import StoragePermPage from '@/components/StoragePermPage.vue'
 import Icon from '@/components/Icon.vue'
@@ -438,6 +453,14 @@ async function revealEntry(node: TreeNode): Promise<void> {
   } catch (e) {
     toast(`打开所在目录失败:${errMsg(e)}`, true)
   }
+}
+
+/** 条目信息页(大小 / 时间 / 行数字数 / git 本地状态) */
+const infoNode = ref<TreeNode | null>(null)
+
+function showEntryInfo(node: TreeNode): void {
+  entryMenu.value = null
+  infoNode.value = node
 }
 
 /** 复制条目的磁盘绝对路径(贴进终端 / 其它工具用) */

@@ -1,7 +1,7 @@
 <template>
   <div class="mp-mask" @click.self="onMaskClick">
     <section class="mp" :class="{ 'mp--wide': wide }">
-      <header class="mp-bar">
+      <header class="mp-bar" :class="{ 'mp-bar--close': showClose }">
         <button class="mp-lead" :title="backTitle" :disabled="busy" @click="emit('back')">
           <Icon :name="leadIcon" :size="20" />
         </button>
@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '@/components/Icon.vue'
 import { useBackLayer } from '@/core/backstack'
 
@@ -57,8 +57,19 @@ const props = withDefaults(
 
 const emit = defineEmits<{ back: [] }>()
 
-const leadIcon = computed(() => (props.lead === 'close' ? 'close' : 'back'))
-const backTitle = computed(() => (props.lead === 'close' ? '关闭' : '返回'))
+const narrowMq = window.matchMedia('(max-width: 900px)')
+const isNarrow = ref(narrowMq.matches)
+narrowMq.addEventListener('change', (e) => (isNarrow.value = e.matches))
+
+/**
+ * 桌面上这层是**居中模态卡**,前导按钮的语义只有"关掉这张卡"——一律显示 ✕ 并挪到
+ * 右上角(桌面窗口惯例;左上角的 ← 是手机整屏页的语义)。手机端不变:左上角返回。
+ * 例外是手机设置的二级页(lead='back' 且窄屏),那才是真的"退回上一级"。
+ */
+const showClose = computed(() => !isNarrow.value || props.lead === 'close')
+
+const leadIcon = computed(() => (showClose.value ? 'close' : 'back'))
+const backTitle = computed(() => (showClose.value ? '关闭' : '返回'))
 
 useBackLayer(() => {
   if (!props.busy) emit('back')
@@ -171,6 +182,14 @@ function onMaskClick(): void {
     align-items: center;
     justify-content: center;
     animation: mp-fade 0.16s ease;
+  }
+  /* 关闭按钮排到最后一格 = 右上角;标题随之左对齐(桌面弹窗惯例) */
+  .mp-bar--close .mp-lead {
+    order: 3;
+  }
+  .mp-bar--close .mp-title {
+    text-align: left;
+    padding-left: 8px;
   }
   .mp {
     width: min(520px, calc(100vw - 64px));

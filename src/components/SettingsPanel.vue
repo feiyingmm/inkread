@@ -77,7 +77,8 @@
 
         <!-- 阅读 -->
         <template v-else-if="tab === 'reading'">
-          <div class="set-item">
+          <!-- 阅读宽度只对桌面有意义:窄屏正文一律铺满(版心是为了控制每行字数,手机上没得控) -->
+          <div v-if="!isNarrow" class="set-item">
             <div class="si-info">
               <div class="si-title">阅读宽度</div>
               <div class="si-desc">书卷版心利于长文阅读;宽页适合大表格</div>
@@ -94,7 +95,8 @@
               <div class="si-title">正文字号</div>
               <div class="si-desc">{{ settings.fontSize }}px · 手机上也可在正文双指捏合调节</div>
             </div>
-            <input v-model.number="settings.fontSize" type="range" min="14" max="20" step="1" class="si-range" />
+            <!-- 上下限与手机端双指捏合一致(MarkdownView),否则捏到 21/22 再回设置面板会被悄悄夹回去 -->
+            <input v-model.number="settings.fontSize" type="range" min="13" max="22" step="1" class="si-range" />
           </div>
           <div class="set-item">
             <div class="si-info">

@@ -193,6 +193,13 @@ static NEXT_WINDOW_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::Atomic
 
 /// 新开一个墨阅窗口,并登记它开机要打开的目标(前端启动时用 take_window_target 取走)。
 /// 多窗口共用同一进程,因此文库注册表、令牌只有一份,不存在并发写覆盖。
+///
+/// 🔴 **只能在非主线程调用**。`WebviewWindowBuilder::build()` 的官方文档写着:
+/// > On Windows, this function deadlocks when used in a synchronous command and event handlers
+/// > (wry#583)。You should use `async` commands or separate threads.
+/// 原因是新建 WebView2 需要泵消息循环,而同步命令 / 事件回调本身就跑在主线程的
+/// WebView2 IPC 回调里,重入即死锁 —— v0.3.4 的真实故障:菜单点「以新窗口打开」后
+/// 新窗口白屏、且整个应用一起卡死无响应。
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn spawn_window(app: &AppHandle, target: state::WindowTarget) -> Result<(), String> {
     use std::sync::atomic::Ordering;
@@ -203,18 +210,41 @@ fn spawn_window(app: &AppHandle, target: state::WindowTarget) -> Result<(), Stri
         let mut map = st.window_targets.lock().map_err(|e| e.to_string())?;
         map.insert(label.clone(), target);
     }
-    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
+    let built = tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
         .title("墨阅")
         .inner_size(1280.0, 820.0)
         .min_inner_size(760.0, 500.0)
+        // 与主窗口一致:Ctrl+滚轮 / Ctrl+加减 缩放页面
+        .zoom_hotkeys_enabled(true)
         .center()
-        .build()
-        .map_err(|e| format!("新窗口创建失败: {e}"))?;
+        .build();
+    if let Err(e) = built {
+        // 建窗失败就把登记的目标撤掉,免得留下永远取不走的孤儿条目
+        if let Ok(mut map) = app.state::<AppState>().window_targets.lock() {
+            map.remove(&label);
+        }
+        return Err(format!("新窗口创建失败: {e}"));
+    }
     Ok(())
 }
 
+/// 从主线程(事件回调 / 同步命令)开窗的安全入口:把 build() 丢到独立线程,
+/// 避开上面那条 Windows 死锁。拿不到返回值,失败只能记日志。
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn spawn_window_off_main(app: &AppHandle, target: state::WindowTarget) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = spawn_window(&app, target) {
+            eprintln!("[inkread] {e}");
+        }
+    });
+}
+
 /// 应用内「以新窗口打开」。Android 无多窗口,直接报错由前端拦住(菜单项本就不显示)。
-#[tauri::command]
+///
+/// 必须是 `(async)`:Tauri 会把它放到独立线程执行,普通同步命令跑在主线程上,
+/// 在里面建窗会死锁(见 spawn_window 的注释)。
+#[tauri::command(async)]
 fn open_new_window(_app: AppHandle, _target: state::WindowTarget) -> Result<(), String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -466,6 +496,14 @@ fn minimize_app(_window: tauri::WebviewWindow) -> Result<(), String> {
     {
         Ok(())
     }
+}
+
+/// 单个条目的信息(右键 / 长按 →「文件信息」)
+#[tauri::command(async)]
+fn entry_info(app: AppHandle, repo_id: String, path: String) -> Result<fsops::EntryInfo, String> {
+    let root = state::repo_path(&app, &repo_id)?;
+    let abs = state::resolve_in_repo(&root, &path)?;
+    fsops::entry_info(&abs, &path)
 }
 
 /// 仓库内相对路径 → 磁盘绝对路径(「复制绝对路径」「打开所在目录」用)
@@ -848,9 +886,8 @@ pub fn run() {
         match pick_md_from_args(argv) {
             Some(p) => {
                 let target = state::WindowTarget { file: Some(p), ..Default::default() };
-                if let Err(e) = spawn_window(app, target) {
-                    eprintln!("新窗口创建失败: {e}");
-                }
+                // 本回调跑在主线程,建窗必须转到独立线程(否则 Windows 上死锁)
+                spawn_window_off_main(app, target);
             }
             // 没带文件的重复启动(点图标):聚焦已有窗口,不再开新的
             None => {
@@ -910,6 +947,7 @@ pub fn run() {
             set_immersive,
             minimize_app,
             abs_path,
+            entry_info,
             list_dirs,
             open_path,
             take_launch_file

@@ -179,6 +179,61 @@ async function searchRepo(repo: DevRepo, query: string) {
   return hits
 }
 
+/** 目录子树统计:文件数 / 子目录数 / 总字节(与 Rust 侧 fsops::dir_stats 同规则) */
+async function dirStats(abs: string, depth = 0): Promise<{ files: number; dirs: number; bytes: number }> {
+  const acc = { files: 0, dirs: 0, bytes: 0 }
+  if (depth > 16) return acc
+  let entries
+  try {
+    entries = await fsp.readdir(abs, { withFileTypes: true })
+  } catch {
+    return acc
+  }
+  for (const e of entries) {
+    if (e.name.startsWith('.') || e.name === 'node_modules') continue
+    const child = path.join(abs, e.name)
+    if (e.isDirectory()) {
+      acc.dirs++
+      const sub = await dirStats(child, depth + 1)
+      acc.files += sub.files
+      acc.dirs += sub.dirs
+      acc.bytes += sub.bytes
+    } else if (e.isFile()) {
+      acc.files++
+      try {
+        acc.bytes += (await fsp.stat(child)).size
+      } catch {
+        /* 读不到就不计 */
+      }
+    }
+  }
+  return acc
+}
+
+/** 条目信息(与 Rust 侧 fsops::entry_info 同契约) */
+async function entryInfo(abs: string, rel: string) {
+  const stat = await fsp.stat(abs)
+  const info: Record<string, unknown> = {
+    path: rel,
+    absPath: abs,
+    isDir: stat.isDirectory(),
+    size: stat.size,
+    mtime: stat.mtimeMs,
+    ctime: stat.birthtimeMs || undefined,
+  }
+  if (stat.isDirectory()) {
+    const { files, dirs, bytes } = await dirStats(abs)
+    info.size = bytes
+    info.fileCount = files
+    info.dirCount = dirs
+  } else if (TEXT_EXT.has(path.extname(rel).slice(1).toLowerCase()) && stat.size <= 4 * 1024 * 1024) {
+    const text = await fsp.readFile(abs, 'utf-8')
+    info.lines = text.length === 0 ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0)
+    info.chars = [...text].length
+  }
+  return info
+}
+
 function json(res: ServerResponse, data: unknown, code = 200) {
   res.statusCode = code
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -263,6 +318,10 @@ export function inkreadDevServer(): Plugin {
             }
             case '/abs-path': {
               return json(res, { path: resolveInRepo(repo, relPath) })
+            }
+            case '/entry-info': {
+              const abs = resolveInRepo(repo, relPath)
+              return json(res, await entryInfo(abs, relPath))
             }
             case '/create-file': {
               const abs = resolveInRepo(repo, relPath)

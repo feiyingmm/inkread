@@ -425,3 +425,40 @@
   background: #8a6d1f;
   color: #f5e9c8;
 }
+
+/* ============ 正文的响应式 / 打印覆盖 ============
+   ⚠️ 这几条**必须写在本文件**(且在上面的基础规则之后)。
+   main.ts 的加载顺序是 app.css → reading.css,而 `.prose` / `.prose-wrap` /
+   `.fold-hidden` 的基础规则都在本文件里;媒体查询**不提升优先级**,所以同名选择器
+   写在 app.css 的 @media 里会被本文件后到的基础规则整条压掉 —— v0.3.4 之前
+   「手机端正文铺满」「打印取消版心」「打印展开折叠章节」三处改动全部因此失效
+   (真机实测手机上左右仍是桌面的 44px 内边距)。 */
+
+/* ---------- 手机 / 窄窗口:正文铺满,只留一点呼吸边距 ---------- */
+@media (max-width: 900px) {
+  /* 书卷版心是桌面上为了控制每行字数才存在的,窄屏本来一行就放不了几个字 */
+  .prose,
+  .prose.is-wide {
+    max-width: none;
+  }
+  .prose-wrap {
+    padding: 14px 10px 70px;
+  }
+  /* 表格在窄屏靠容器横向滚动,单元格不必再自设上限(否则一格能吃掉整屏宽) */
+  .prose td {
+    max-width: 16em;
+  }
+}
+
+/* ---------- 打印 / 另存 PDF:满纸宽,且折叠的章节要打全 ---------- */
+@media print {
+  .prose {
+    max-width: none;
+  }
+  .prose-wrap {
+    padding: 0;
+  }
+  .fold-hidden {
+    display: revert !important;
+  }
+}

@@ -99,6 +99,9 @@ const ICONS: Record<string, IconDef> = {
   'chevron-up': { paths: ['M6 15l6-6 6 6'] },
   'chevron-down': { paths: ['M6 9l6 6 6-6'] },
   'chevron-right': { paths: ['M9 6l6 6-6 6'] },
+  // 目录一键折叠 / 展开:两个箭头朝中线聚拢 = 折叠,向外张开 = 展开
+  'collapse-all': { paths: ['M7 4l5 5 5-5', 'M7 20l5-5 5 5', 'M4 12h16'] },
+  'expand-all': { paths: ['M7 9l5-5 5 5', 'M7 15l5 5 5-5', 'M4 12h16'] },
   'arrow-down-sm': { paths: ['M12 5v14', 'M6 13l6 6 6-6'] },
   'arrow-up-sm': { paths: ['M12 19V5', 'M6 11l6-6 6 6'] },
   branch: {

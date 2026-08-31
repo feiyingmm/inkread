@@ -23,6 +23,29 @@ export interface FileContent {
   mtime: number
 }
 
+/** 条目信息(右键 / 长按 →「文件信息」);缺失项按平台能力可能为 undefined */
+export interface EntryInfo {
+  /** 仓库内相对路径 */
+  path: string
+  /** 磁盘绝对路径 */
+  absPath: string
+  isDir: boolean
+  /** 文件=自身字节数;目录=子树总字节数 */
+  size: number
+  /** 修改时间(epoch 毫秒) */
+  mtime: number
+  /** 创建时间(部分文件系统取不到) */
+  ctime?: number
+  /** 目录:子树文件数 */
+  fileCount?: number
+  /** 目录:子树子目录数 */
+  dirCount?: number
+  /** 文本类文件:行数 */
+  lines?: number
+  /** 文本类文件:字符数 */
+  chars?: number
+}
+
 export type GitChangeKind = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
 
 export interface GitChange {
@@ -104,4 +127,6 @@ export interface Backend {
   discardFile(repoId: string, path: string): Promise<void>
   /** 仓库内相对路径 → 磁盘绝对路径(复制路径 / 在文件管理器中显示) */
   absPath(repoId: string, path: string): Promise<string>
+  /** 条目信息:大小 / 时间 / 行数字数 / 目录子项统计 */
+  entryInfo(repoId: string, path: string): Promise<EntryInfo>
 }

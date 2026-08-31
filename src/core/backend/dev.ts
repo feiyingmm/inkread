@@ -1,4 +1,14 @@
-import type { Backend, FileContent, GitOpResult, GitStatus, RepoMeta, SearchHit, TreeNode, WindowTarget } from './types'
+import type {
+  Backend,
+  EntryInfo,
+  FileContent,
+  GitOpResult,
+  GitStatus,
+  RepoMeta,
+  SearchHit,
+  TreeNode,
+  WindowTarget,
+} from './types'
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -55,4 +65,5 @@ export const devBackend: Backend = {
   deleteEntry: (repo, path) => post<void>(`/api/delete?repo=${enc(repo)}&path=${enc(path)}`),
   discardFile: (repo, path) => post<void>(`/api/discard-file?repo=${enc(repo)}&path=${enc(path)}`),
   absPath: (repo, path) => get<{ path: string }>(`/api/abs-path?repo=${enc(repo)}&path=${enc(path)}`).then((r) => r.path),
+  entryInfo: (repo, path) => get<EntryInfo>(`/api/entry-info?repo=${enc(repo)}&path=${enc(path)}`),
 }

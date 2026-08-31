@@ -2,6 +2,7 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   Backend,
+  EntryInfo,
   FileContent,
   GitOpResult,
   GitStatus,
@@ -38,4 +39,5 @@ export const tauriBackend: Backend = {
   deleteEntry: (repoId, path) => invoke<void>('delete_entry', { repoId, path }),
   discardFile: (repoId, path) => invoke<void>('git_discard_file', { repoId, path }),
   absPath: (repoId, path) => invoke<string>('abs_path', { repoId, path }),
+  entryInfo: (repoId, path) => invoke<EntryInfo>('entry_info', { repoId, path }),
 }

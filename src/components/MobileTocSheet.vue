@@ -1,25 +1,39 @@
 <template>
-  <MobilePage title="目录" flush @back="emit('close')">
+  <MobilePage title="大纲" flush @back="emit('close')">
+    <template #actions>
+      <button
+        v-if="branches.length > 0"
+        class="ts-act"
+        :title="allCollapsed ? '展开全部' : '折叠全部'"
+        :aria-label="allCollapsed ? '展开全部' : '折叠全部'"
+        @click="toggleAll"
+      >
+        <Icon :name="allCollapsed ? 'expand-all' : 'collapse-all'" :size="19" />
+      </button>
+    </template>
+
     <div class="toc-list">
       <div v-if="items.length === 0" class="palette-empty">本文没有标题</div>
-      <button
-        v-for="item in items"
-        :key="item.slug"
-        class="toc-item"
-        :class="{ 'is-active': item.slug === activeSlug }"
-        :style="{ paddingLeft: `${16 + (item.level - minLevel) * 16}px` }"
-        @click="onJump(item.slug)"
-      >
-        {{ item.title }}
-      </button>
+      <TocTree
+        v-else
+        :nodes="tree"
+        :active-slug="activeSlug"
+        :collapsed="collapsed"
+        :trail="trail"
+        @jump="onJump"
+        @toggle="toggle"
+      />
     </div>
   </MobilePage>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { TocItem } from '@/core/markdown/pipeline'
+import { computed, reactive, ref, watch } from 'vue'
+import Icon from '@/components/Icon.vue'
 import MobilePage from '@/components/MobilePage.vue'
+import TocTree from '@/components/TocTree.vue'
+import { ancestorSlugs, branchSlugs, buildTocTree } from '@/core/toc-tree'
+import type { TocItem } from '@/core/markdown/pipeline'
 
 const props = defineProps<{
   items: TocItem[]
@@ -28,7 +42,31 @@ const props = defineProps<{
 
 const emit = defineEmits<{ jump: [slug: string]; close: [] }>()
 
-const minLevel = computed(() => (props.items.length ? Math.min(...props.items.map((i) => i.level)) : 1))
+const tree = computed(() => buildTocTree(props.items))
+const branches = computed(() => branchSlugs(tree.value))
+const trail = computed(() => ancestorSlugs(tree.value, props.activeSlug))
+
+const collapsed = reactive<Record<string, boolean>>({})
+const allCollapsed = ref(false)
+
+watch(
+  () => props.items,
+  () => {
+    for (const k of Object.keys(collapsed)) delete collapsed[k]
+    allCollapsed.value = false
+  },
+)
+
+function toggle(slug: string): void {
+  collapsed[slug] = !collapsed[slug]
+  allCollapsed.value = branches.value.every((s) => collapsed[s])
+}
+
+function toggleAll(): void {
+  const next = !allCollapsed.value
+  for (const s of branches.value) collapsed[s] = next
+  allCollapsed.value = next
+}
 
 function onJump(slug: string): void {
   emit('jump', slug)
@@ -38,14 +76,21 @@ function onJump(slug: string): void {
 
 <style scoped>
 .toc-list {
-  padding: 8px 6px;
+  padding: 8px 8px calc(16px + var(--safe-bottom));
 }
-.toc-list .toc-item {
-  font-size: 14.5px;
-  padding-top: 11px;
-  padding-bottom: 11px;
-  padding-right: 14px;
-  white-space: normal;
-  line-height: 1.6;
+.ts-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--t2);
+  cursor: pointer;
+}
+.ts-act:active {
+  background: var(--bg-hover);
 }
 </style>
