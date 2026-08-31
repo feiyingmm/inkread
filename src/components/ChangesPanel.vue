@@ -1,41 +1,40 @@
 <template>
-  <div class="mask mask--center mask--sheet" @click.self="emit('close')">
-    <div class="changes-card">
-      <h3>本地变更({{ changes.length }})</h3>
-      <div class="changes-body">
-        <div v-if="changes.length === 0" class="palette-empty">工作区干净,没有未提交的修改</div>
-        <div v-for="c in changes" :key="c.path" class="change-row">
-          <button
-            class="chg-main"
-            :disabled="c.kind === 'deleted'"
-            :title="c.kind === 'deleted' ? '文件已删除' : '打开查看'"
-            @click="emit('open', c.path)"
-          >
-            <span class="chg-badge" :class="`chg--${c.kind}`">{{ KIND_LABEL[c.kind] }}</span>
-            <span class="chg-path">{{ c.path }}</span>
-          </button>
-          <button
-            class="chg-undo"
-            :title="c.kind === 'untracked' ? '撤销:删除该新增文件' : '撤销修改,恢复到最近提交版本'"
-            @click="emit('discard', c)"
-          >
-            <Icon name="undo" :size="15" />
-          </button>
-        </div>
-      </div>
-      <div class="changes-foot">
-        <span class="chg-hint">「提交并推送」会包含以上全部变更</span>
-        <button class="sb-sync" :disabled="changes.length === 0 || syncing" @click="emit('sync')">
-          {{ syncing ? '同步中…' : '提交并推送' }}
+  <MobilePage :title="`本地变更(${changes.length})`" flush @back="emit('close')">
+    <div class="changes-body">
+      <div v-if="changes.length === 0" class="palette-empty">工作区干净,没有未提交的修改</div>
+      <div v-for="c in changes" :key="c.path" class="change-row">
+        <button
+          class="chg-main"
+          :disabled="c.kind === 'deleted'"
+          :title="c.kind === 'deleted' ? '文件已删除' : '打开查看'"
+          @click="emit('open', c.path)"
+        >
+          <span class="chg-badge" :class="`chg--${c.kind}`">{{ KIND_LABEL[c.kind] }}</span>
+          <span class="chg-path">{{ c.path }}</span>
+        </button>
+        <button
+          class="chg-undo"
+          :title="c.kind === 'untracked' ? '撤销:删除该新增文件' : '撤销修改,恢复到最近提交版本'"
+          @click="emit('discard', c)"
+        >
+          <Icon name="undo" :size="15" />
         </button>
       </div>
     </div>
-  </div>
+
+    <template #footer>
+      <span class="chg-hint">「提交并推送」会包含以上全部变更</span>
+      <button class="sb-sync" :disabled="changes.length === 0 || syncing" @click="emit('sync')">
+        {{ syncing ? '同步中…' : '提交并推送' }}
+      </button>
+    </template>
+  </MobilePage>
 </template>
 
 <script setup lang="ts">
 import type { GitChange, GitChangeKind } from '@/core/backend'
 import Icon from '@/components/Icon.vue'
+import MobilePage from '@/components/MobilePage.vue'
 
 defineProps<{
   changes: GitChange[]
@@ -59,30 +58,8 @@ const KIND_LABEL: Record<GitChangeKind, string> = {
 </script>
 
 <style scoped>
-.changes-card {
-  width: min(560px, calc(100vw - 50px));
-  max-height: min(540px, calc(100vh - 120px));
-  display: flex;
-  flex-direction: column;
-  margin-top: 90px;
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-}
-.changes-card h3 {
-  margin: 0;
-  padding: 16px 20px 12px;
-  font-family: var(--font-serif);
-  font-size: 16px;
-  color: var(--t1);
-  flex-shrink: 0;
-}
 .changes-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 10px 10px;
+  padding: 8px 10px;
 }
 .change-row {
   display: flex;
@@ -179,42 +156,27 @@ const KIND_LABEL: Record<GitChangeKind, string> = {
   word-break: break-all;
   line-height: 1.5;
 }
-.changes-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
 .chg-hint {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: var(--t3);
 }
 @media (max-width: 900px) {
-  .changes-card {
-    margin: 0;
-    width: 100vw;
-    max-height: calc(100dvh - var(--safe-top) - 60px);
-    border: none;
-    border-radius: 18px 18px 0 0;
-    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
-    animation: sheet-up 0.22s ease;
-  }
-  .changes-card h3 {
-    font-size: 17px;
-    text-align: center;
-  }
   .chg-main {
-    padding: 11px 10px;
+    padding: 12px 10px;
   }
   .chg-undo {
     width: 40px;
     height: 40px;
   }
-  .changes-foot {
-    padding-bottom: calc(10px + var(--safe-bottom));
+  .chg-hint {
+    display: none;
+  }
+  .sb-sync {
+    flex: 1;
+    height: 42px;
+    font-size: 14px;
   }
 }
 </style>

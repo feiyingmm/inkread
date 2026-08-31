@@ -1761,11 +1761,12 @@ dependencies = [
 
 [[package]]
 name = "inkread"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "base64 0.22.1",
  "git2",
  "jni",
+ "libgit2-sys",
  "openssl",
  "percent-encoding",
  "serde",

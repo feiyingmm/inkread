@@ -1,7 +1,9 @@
 <template>
-  <div class="mask mask--center" @click.self="emit('close')">
+  <div class="mask mask--center mask--page" @click.self="emit('close')">
     <div class="palette">
       <div class="palette-head">
+        <!-- 手机端整屏页:左上角返回,与其它页面一致 -->
+        <button class="pl-back" title="返回" @click="emit('close')"><Icon name="back" :size="20" /></button>
         <button class="opt" :class="{ 'is-on': mode === 'files' }" @click="switchMode('files')">文件</button>
         <button class="opt" :class="{ 'is-on': mode === 'search' }" @click="switchMode('search')">全文</button>
         <input
@@ -63,6 +65,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { backend, type SearchHit, type TreeNode } from '@/core/backend'
 import { fuzzyFilter } from '@/core/fuzzy'
 import { fileKind } from '@/core/paths'
+import Icon from '@/components/Icon.vue'
+import { useBackLayer } from '@/core/backstack'
 
 interface FlatHit extends SearchHit {
   idx: number
@@ -79,6 +83,9 @@ const emit = defineEmits<{
   close: []
   open: [path: string, highlight?: string]
 }>()
+
+// 系统返回键/返回手势优先关掉本面板,而不是退出应用
+useBackLayer(() => emit('close'))
 
 const mode = ref<'files' | 'search'>(props.initialMode)
 const query = ref('')

@@ -11,9 +11,13 @@
   --shadow-card: 0 10px 40px rgba(10, 25, 41, 0.28);
   --safe-top: 0px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* 软键盘净高。Android 由原生 MainActivity 实时写入(targetSdk 35+ 起窗口不再
+     随键盘缩小,WebView 自己感知不到);其余平台恒 0。 */
+  --kb: 0px;
 }
 
-/* Android 状态栏叠在 WebView 上:全部固定弹层与外壳共用这一让位高度 */
+/* Android 状态栏叠在 WebView 上:全部固定弹层与外壳共用这一让位高度。
+   这里的 30px 只是原生把真实内边距写进来之前的首帧兜底值。 */
 :root[data-android='1'] {
   --safe-top: max(env(safe-area-inset-top, 0px), 30px);
 }

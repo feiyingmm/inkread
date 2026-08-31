@@ -1,7 +1,6 @@
 <template>
   <div class="shell">
     <div class="card">
-      <div v-if="sideOpen && isNarrow" class="side-mask" @click="sideOpen = false"></div>
       <aside class="side" :class="{ 'is-closed': !sideOpen }" :style="sideStyle">
         <div class="side-head">
           <div class="side-logo">墨</div>
@@ -12,7 +11,9 @@
               <span class="repo-caret"><Icon name="chevron-down" :size="11" /></span>
             </div>
           </button>
-          <button class="side-close" title="收起文库" @click="sideOpen = false"><Icon name="close" :size="20" /></button>
+          <button class="side-close" :title="isNarrow ? '返回' : '收起文库'" @click="sideOpen = false">
+            <Icon :name="isNarrow ? 'back' : 'close'" :size="20" />
+          </button>
           <template v-if="repoMenuOpen">
             <div class="repo-menu-mask" @click="repoMenuOpen = false"></div>
             <div class="repo-menu">
@@ -199,7 +200,7 @@
     </template>
 
     <button
-      v-if="isNarrow && !editMode && currentPath && toc.length > 0"
+      v-if="isNarrow && !editMode && !sideOpen && currentPath && toc.length > 0"
       class="fab-toc"
       :class="{ 'chrome-hidden': chromeHidden }"
       title="目录"
@@ -236,6 +237,16 @@
         </template>
         <template v-if="entryMenu.node">
           <div class="repo-menu-sep"></div>
+          <!-- Android 没有通用的「定位到文件」入口,只在桌面提供 -->
+          <button v-if="isTauri && !isAndroid" class="repo-item" @click="revealEntry(entryMenu.node)">
+            <span class="ri-icon"><Icon name="folder-open" :size="15" /></span>打开所在目录
+          </button>
+          <button class="repo-item" @click="copyEntryPath(entryMenu.node)">
+            <span class="ri-icon"><Icon name="copy" :size="15" /></span>复制绝对路径
+          </button>
+        </template>
+        <template v-if="entryMenu.node">
+          <div class="repo-menu-sep"></div>
           <button class="repo-item" @click="startRename(entryMenu.node)">
             <span class="ri-icon"><Icon name="rename" :size="15" /></span>重命名…
           </button>
@@ -247,48 +258,52 @@
     </template>
 
     <!-- 重命名 -->
-    <div v-if="renameDialog" class="mask mask--center mask--sheet" @click.self="renameDialog = null">
-      <div class="ne-card">
-        <h3>重命名</h3>
-        <div class="ne-dir" :title="renameDialog.node.path">{{ renameDialog.node.path }}</div>
-        <input
-          ref="renameNameEl"
-          v-model="renameName"
-          class="palette-input ne-input"
-          placeholder="新名称"
-          @keydown.enter="doRename"
-          @keydown.esc="renameDialog = null"
-        />
-        <div class="set-row" style="justify-content: flex-end; margin-top: 14px">
-          <button class="opt" @click="renameDialog = null">取消</button>
-          <button class="opt is-on" :disabled="!renameName.trim() || creating" @click="doRename">
-            {{ creating ? '处理中…' : '重命名' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <MobilePage v-if="renameDialog" title="重命名" :busy="creating" @back="renameDialog = null">
+      <div class="ne-dir" :title="renameDialog.node.path">{{ renameDialog.node.path }}</div>
+      <input
+        ref="renameNameEl"
+        v-model="renameName"
+        class="palette-input ne-input"
+        placeholder="新名称"
+        @keydown.enter="doRename"
+        @keydown.esc="renameDialog = null"
+      />
+      <template #footer>
+        <span class="foot-flex"></span>
+        <button class="opt" @click="renameDialog = null">取消</button>
+        <button class="opt is-on" :disabled="!renameName.trim() || creating" @click="doRename">
+          {{ creating ? '处理中…' : '重命名' }}
+        </button>
+      </template>
+    </MobilePage>
 
     <!-- 新建文档 / 文件夹 -->
-    <div v-if="newDialog" class="mask mask--center mask--sheet" @click.self="newDialog = null">
-      <div class="ne-card">
-        <h3>{{ newDialog.kind === 'file' ? '新建文档' : '新建文件夹' }}</h3>
-        <div class="ne-dir" :title="newDialog.dir || '(仓库根目录)'">位于:{{ newDialog.dir || '(仓库根目录)' }}</div>
-        <input
-          ref="newNameEl"
-          v-model="newName"
-          class="palette-input ne-input"
-          :placeholder="newDialog.kind === 'file' ? '文档名,如 读书笔记.md' : '文件夹名'"
-          @keydown.enter="doCreate"
-          @keydown.esc="newDialog = null"
-        />
-        <div class="set-row" style="justify-content: flex-end; margin-top: 14px">
-          <button class="opt" @click="newDialog = null">取消</button>
-          <button class="opt is-on" :disabled="!newName.trim() || creating" @click="doCreate">
-            {{ creating ? '创建中…' : '创建' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <MobilePage
+      v-if="newDialog"
+      :title="newDialog.kind === 'file' ? '新建文档' : '新建文件夹'"
+      :busy="creating"
+      @back="newDialog = null"
+    >
+      <div class="ne-dir" :title="newDialog.dir || '(仓库根目录)'">位于:{{ newDialog.dir || '(仓库根目录)' }}</div>
+      <input
+        ref="newNameEl"
+        v-model="newName"
+        class="palette-input ne-input"
+        :placeholder="newDialog.kind === 'file' ? '文档名,如 读书笔记.md' : '文件夹名'"
+        @keydown.enter="doCreate"
+        @keydown.esc="newDialog = null"
+      />
+      <template #footer>
+        <span class="foot-flex"></span>
+        <button class="opt" @click="newDialog = null">取消</button>
+        <button class="opt is-on" :disabled="!newName.trim() || creating" @click="doCreate">
+          {{ creating ? '创建中…' : '创建' }}
+        </button>
+      </template>
+    </MobilePage>
+
+    <!-- 首次启动的存储权限引导(Android 未授权时) -->
+    <StoragePermPage v-if="permPageOpen" @close="permPageOpen = false" />
   </div>
 </template>
 
@@ -309,8 +324,13 @@ import CloneDialog from '@/components/CloneDialog.vue'
 import LocalPathDialog from '@/components/LocalPathDialog.vue'
 import MobileTocSheet from '@/components/MobileTocSheet.vue'
 import ChangesPanel from '@/components/ChangesPanel.vue'
+import MobilePage from '@/components/MobilePage.vue'
+import StoragePermPage from '@/components/StoragePermPage.vue'
 import Icon from '@/components/Icon.vue'
 import { backend, isTauri } from '@/core/backend'
+import { copyText } from '@/core/clipboard'
+import { installAndroidBackHandler, popLayer, useBackLayerWhen } from '@/core/backstack'
+import { checkStorageAccess, markPrompted, shouldPromptOnLaunch } from '@/core/storage-perm'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
 import { dirOf, fileKind } from '@/core/paths'
@@ -406,6 +426,30 @@ const ctxStyle = computed(() => {
 
 function onTreeMenu(node: TreeNode, x: number, y: number): void {
   entryMenu.value = { node, x, y }
+}
+
+/** 在系统文件管理器中定位该条目(桌面);Android 没有通用的"定位到文件"入口,菜单里不显示 */
+async function revealEntry(node: TreeNode): Promise<void> {
+  entryMenu.value = null
+  try {
+    const abs = await backend.absPath(repo.currentRepoId, node.path)
+    const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
+    await revealItemInDir(abs)
+  } catch (e) {
+    toast(`打开所在目录失败:${errMsg(e)}`, true)
+  }
+}
+
+/** 复制条目的磁盘绝对路径(贴进终端 / 其它工具用) */
+async function copyEntryPath(node: TreeNode): Promise<void> {
+  entryMenu.value = null
+  try {
+    const abs = await backend.absPath(repo.currentRepoId, node.path)
+    await copyText(abs)
+    toast(`已复制路径:${abs}`)
+  } catch (e) {
+    toast(`复制失败:${errMsg(e)}`, true)
+  }
 }
 
 /** 树列表空白处右键/长按:根级新建(树行自身的菜单事件由 FileTree 发出) */
@@ -956,10 +1000,9 @@ function onKeydown(e: KeyboardEvent): void {
   } else if (e.altKey && e.key === 'ArrowRight') {
     e.preventDefault()
     router.forward()
-  } else if (e.key === 'Escape' && paletteOpen.value) {
-    paletteOpen.value = false
-  } else if (e.key === 'Escape' && settingsOpen.value) {
-    settingsOpen.value = false
+  } else if (e.key === 'Escape') {
+    // 与手机端返回键共用同一个层栈:Esc 逐层退回
+    if (popLayer()) e.preventDefault()
   }
 }
 
@@ -1012,10 +1055,44 @@ async function onOpenInNewWindow(node: TreeNode | null): Promise<void> {
   }
 }
 
+// ---- 系统返回键 / Esc:每个浮层占一层,逐层退回,退无可退才离开应用 ----
+// 弹层组件(设置、对话框、面板)各自在挂载时登记;这里补上不靠挂载切换的那几个。
+const permPageOpen = ref(false)
+
+useBackLayerWhen(
+  computed(() => chromeHidden.value),
+  () => (chromeHidden.value = false),
+)
+useBackLayerWhen(
+  computed(() => isNarrow.value && sideOpen.value),
+  () => (sideOpen.value = false),
+)
+useBackLayerWhen(
+  computed(() => repoMenuOpen.value),
+  () => (repoMenuOpen.value = false),
+)
+useBackLayerWhen(
+  computed(() => !!entryMenu.value),
+  () => (entryMenu.value = null),
+)
+useBackLayerWhen(
+  computed(() => !!pullMenu.value),
+  () => (pullMenu.value = null),
+)
+
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('focus', onFocusRefresh)
   document.addEventListener('visibilitychange', onFocusRefresh)
+  void installAndroidBackHandler()
+  // Android:文库是手机存储里的目录,没有「所有文件访问」连文件名都读不到,
+  // 与其等用户添加文库时才撞墙,不如首次启动就把话说清楚(问过一次就不再自动弹)
+  if (isTauri && isAndroid && shouldPromptOnLaunch()) {
+    void checkStorageAccess().then((ok) => {
+      if (ok) markPrompted()
+      else permPageOpen.value = true
+    })
+  }
   await repo.init()
   if (!currentPath.value) {
     openDefaultDoc()

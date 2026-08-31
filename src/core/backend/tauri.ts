@@ -37,4 +37,5 @@ export const tauriBackend: Backend = {
   renameEntry: (repoId, from, to) => invoke<void>('rename_entry', { repoId, from, to }),
   deleteEntry: (repoId, path) => invoke<void>('delete_entry', { repoId, path }),
   discardFile: (repoId, path) => invoke<void>('git_discard_file', { repoId, path }),
+  absPath: (repoId, path) => invoke<string>('abs_path', { repoId, path }),
 }

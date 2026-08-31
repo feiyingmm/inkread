@@ -54,4 +54,5 @@ export const devBackend: Backend = {
   renameEntry: (repo, from, to) => post<void>(`/api/rename?repo=${enc(repo)}&path=${enc(from)}&to=${enc(to)}`),
   deleteEntry: (repo, path) => post<void>(`/api/delete?repo=${enc(repo)}&path=${enc(path)}`),
   discardFile: (repo, path) => post<void>(`/api/discard-file?repo=${enc(repo)}&path=${enc(path)}`),
+  absPath: (repo, path) => get<{ path: string }>(`/api/abs-path?repo=${enc(repo)}&path=${enc(path)}`).then((r) => r.path),
 }

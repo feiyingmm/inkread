@@ -104,6 +104,8 @@ fn build_tree_inner(
             });
         }
     }
+    // 这里只做个稳定的基础序;**最终显示顺序由前端 `core/tree-sort.ts` 统一裁决**
+    // (中文要按拼音排,Rust 侧的码位序对人没有意义,两端各排一遍还会不一致)
     nodes.sort_by(|a, b| {
         if a.node_type != b.node_type {
             return if a.node_type == "dir" {

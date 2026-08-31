@@ -1,6 +1,6 @@
 [package]
 name = "inkread"
-version = "0.3.3"
+version = "0.3.4"
 description = "墨阅 —— 跨平台 Markdown 阅读应用"
 authors = ["mahonggeng"]
 edition = "2021"
@@ -29,6 +29,13 @@ tauri-plugin-single-instance = "2"
 # Android 交叉编译:静态 openssl(M5 启用 android target 时生效);jni 供授权页拉起/WebView 设置
 [target.'cfg(target_os = "android")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
+# libgit2-sys 只为拿 GIT_OPT_ADD_SSL_X509_CERT 常量与 git_libgit2_opts 符号:
+# 把 CA 根证书**在内存里**灌进 libgit2 的信任库。git2 只暴露了「给一个证书文件路径」的
+# 接口,而那条路在 Android 上物理不可行(详见 install_ca_bundle)。
+# 它本就在依赖树内(经 git2 传递),显式引入不会引入新版本。
+# 注:OpenSSL 那几个符号改为手写 extern 声明(见 openssl_ffi 模块)——把 openssl-sys 提成
+# 直接依赖会改变构建指纹,导致 vendored OpenSSL 整个重编,得不偿失。
+libgit2-sys = "0.18"
 jni = "0.21"
 
 [profile.release]

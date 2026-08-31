@@ -261,6 +261,9 @@ export function inkreadDevServer(): Plugin {
               if (!q.trim()) return json(res, [])
               return json(res, await searchRepo(repo, q.trim()))
             }
+            case '/abs-path': {
+              return json(res, { path: resolveInRepo(repo, relPath) })
+            }
             case '/create-file': {
               const abs = resolveInRepo(repo, relPath)
               if (fs.existsSync(abs)) return json(res, { error: '同名文件已存在' }, 409)

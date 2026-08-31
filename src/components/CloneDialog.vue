@@ -1,23 +1,34 @@
 <template>
-  <div class="mask mask--center mask--sheet" @click.self="!cloning && emit('close')">
-    <div class="clone-card">
-      <h3>克隆远程仓库</h3>
-      <div class="set-group">
-        <div class="set-label">HTTPS 仓库地址</div>
-        <input v-model="url" class="palette-input" style="width: 100%" placeholder="https://gitee.com/xxx/claude-docs.git" :disabled="cloning" />
-      </div>
-      <div class="set-group">
-        <div class="set-label">访问令牌(私有仓库必填,公开仓库留空)</div>
-        <input v-model="token" class="palette-input" style="width: 100%" type="password" placeholder="Gitee/GitHub Personal Access Token" :disabled="cloning" />
-      </div>
-      <div class="set-row" style="justify-content: flex-end">
-        <button class="opt" :disabled="cloning" @click="emit('close')">取消</button>
-        <button class="opt is-on" :disabled="cloning || !url.trim()" @click="doClone">
-          {{ cloning ? '克隆中,请稍候…' : '开始克隆' }}
-        </button>
-      </div>
+  <MobilePage title="克隆远程仓库" :busy="cloning" :mask-close="!cloning" @back="emit('close')">
+    <div class="set-group">
+      <div class="set-label">HTTPS 仓库地址</div>
+      <input
+        v-model="url"
+        class="palette-input full"
+        placeholder="https://gitee.com/xxx/claude-docs.git"
+        :disabled="cloning"
+      />
     </div>
-  </div>
+    <div class="set-group">
+      <div class="set-label">访问令牌(私有仓库必填,公开仓库留空)</div>
+      <input
+        v-model="token"
+        class="palette-input full"
+        type="password"
+        placeholder="Gitee/GitHub Personal Access Token"
+        :disabled="cloning"
+      />
+    </div>
+    <p class="hint">克隆下来的文库存放在应用私有目录,离线可读;后续拉取会复用这里保存的令牌。</p>
+
+    <template #footer>
+      <span class="foot-flex"></span>
+      <button class="opt" :disabled="cloning" @click="emit('close')">取消</button>
+      <button class="opt is-on" :disabled="cloning || !url.trim()" @click="doClone">
+        {{ cloning ? '克隆中,请稍候…' : '开始克隆' }}
+      </button>
+    </template>
+  </MobilePage>
 </template>
 
 <script setup lang="ts">
@@ -25,6 +36,7 @@ import { ref } from 'vue'
 import { errMsg } from '@/core/errmsg'
 import { backend } from '@/core/backend'
 import { toast } from '@/core/toast'
+import MobilePage from '@/components/MobilePage.vue'
 
 const emit = defineEmits<{ close: []; done: [repoId: string] }>()
 
@@ -48,34 +60,25 @@ async function doClone(): Promise<void> {
 </script>
 
 <style scoped>
-.clone-card {
-  width: min(440px, calc(100vw - 50px));
-  margin-top: 110px;
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 20px 22px;
+.full {
+  width: 100%;
 }
-.clone-card h3 {
-  margin: 0 0 14px;
-  font-family: var(--font-serif);
-  font-size: 16px;
-  color: var(--t1);
+.hint {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--t3);
+}
+.foot-flex {
+  flex: 1;
 }
 @media (max-width: 900px) {
-  .clone-card {
-    margin: 0;
-    width: 100vw;
-    border: none;
-    border-radius: 18px 18px 0 0;
-    box-shadow: 0 -8px 40px rgba(5, 12, 20, 0.35);
-    padding: 20px 18px calc(20px + var(--safe-bottom));
-    animation: sheet-up 0.22s ease;
+  .full {
+    height: 46px;
+    font-size: 15px;
   }
-  .clone-card h3 {
-    font-size: 17px;
-    text-align: center;
+  .foot-flex {
+    display: none;
   }
 }
 </style>

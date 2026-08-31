@@ -304,22 +304,7 @@ button {
   color: #e08585;
 }
 
-/* ---------- 新建文档/文件夹对话框 ---------- */
-.ne-card {
-  width: min(400px, calc(100vw - 48px));
-  margin-top: 110px;
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 20px 22px;
-}
-.ne-card h3 {
-  margin: 0 0 6px;
-  font-family: var(--font-serif);
-  font-size: 16px;
-  color: var(--t1);
-}
+/* ---------- 新建文档/文件夹/重命名(外壳走 MobilePage,这里只管内容) ---------- */
 .ne-dir {
   font-size: 12px;
   color: var(--t3);
@@ -768,10 +753,14 @@ button {
   color: var(--sel-fg);
 }
 
-/* ---------- 设置面板 ---------- */
+/* ---------- 弹层遮罩 ---------- */
 .mask {
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  /* 软键盘弹起时整体抬到键盘上沿(Android targetSdk 35+ 起窗口不再自动缩) */
+  bottom: var(--kb, 0px);
   background: rgba(8, 15, 24, 0.4);
   display: flex;
   align-items: flex-start;
@@ -960,6 +949,24 @@ button {
   font-size: 11.5px;
   color: var(--t3);
   flex-shrink: 0;
+}
+/* 命令面板的返回键只在手机整屏页出现 */
+.pl-back {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--t2);
+  cursor: pointer;
+}
+/* MobilePage 底部操作条里把按钮推到右侧(桌面);手机上按钮铺满,它自行隐藏 */
+.foot-flex {
+  flex: 1;
 }
 
 /* ---------- 阅读进度 / 回顶 / 搜索导航 ---------- */
@@ -1180,14 +1187,7 @@ button {
   }
 }
 
-/* 侧栏遮罩与关闭按钮(仅窄屏使用) */
-.side-mask {
-  position: absolute;
-  inset: 0;
-  background: rgba(8, 15, 24, 0.42);
-  z-index: 29;
-  animation: fade-in 0.18s ease;
-}
+/* 侧栏关闭/返回按钮(仅窄屏使用) */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -1375,6 +1375,41 @@ button {
     padding-bottom: 0;
   }
 
+  /* 整屏页(命令面板):占满屏幕,顶部自己让位状态栏 —— 与 MobilePage 一致的观感 */
+  .mask--page {
+    padding: 0;
+    align-items: stretch;
+    background: var(--bg-card);
+  }
+  .mask--page .palette {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+  }
+  .mask--page .palette-head {
+    padding-top: calc(10px + var(--safe-top));
+  }
+  .mask--page .palette-foot {
+    padding-bottom: calc(7px + var(--safe-bottom));
+  }
+  .pl-back {
+    display: inline-flex;
+  }
+  .foot-flex {
+    display: none;
+  }
+
+  /* MobilePage 底部操作条:手机上按钮铺满,拇指够得到 */
+  .mp-foot .opt,
+  .mp-foot .sb-sync {
+    flex: 1;
+    height: 44px;
+    font-size: 15px;
+  }
+
   /* 文库菜单:手机端从 PC 下拉改为底部弹出卡(Obsidian 式) */
   .repo-menu-mask {
     background: rgba(8, 15, 24, 0.45);
@@ -1451,19 +1486,33 @@ button {
     font-size: 14px;
   }
 
+  /* 文库栏在手机上是一整屏页(语雀式):标题栏 + 满宽列表,树名不再被挤成两行 */
   .side {
     position: absolute;
     left: 0;
+    right: 0;
     top: 0;
     bottom: 0;
     z-index: 30;
-    width: min(280px, 82vw);
-    box-shadow: 8px 0 30px rgba(8, 18, 30, 0.25);
+    width: 100%;
+    border-right: none;
+    box-shadow: none;
   }
   .side.is-closed {
-    width: min(280px, 82vw);
-    transform: translateX(-105%);
-    box-shadow: none;
+    width: 100%;
+    transform: translateX(-102%);
+  }
+  .side-head {
+    padding: 8px 12px 8px 6px;
+    border-bottom: 1px solid var(--line);
+    min-height: 56px;
+  }
+  /* 整屏页的头部按语雀走「← 标题」:返回键挪到最左,方形 logo 让位 */
+  .side-close {
+    order: -1;
+  }
+  .side-logo {
+    display: none;
   }
   .side-close {
     display: inline-flex;

@@ -23,6 +23,8 @@
 </template>
 
 <script setup lang="ts">
+import { useBackLayer } from '@/core/backstack'
+
 defineProps<{
   mode: 'pull' | 'push'
   detail?: string
@@ -32,6 +34,8 @@ const emit = defineEmits<{
   close: []
   discard: []
 }>()
+
+useBackLayer(() => emit('close'))
 </script>
 
 <style scoped>

@@ -30,8 +30,9 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { errMsg } from '@/core/errmsg'
+import { useBackLayerWhen } from '@/core/backstack'
 import { backend } from '@/core/backend'
 import { dirOf, extOf, fileKind } from '@/core/paths'
 import { renderMarkdown, renderPlainText, type TocItem } from '@/core/markdown/pipeline'
@@ -323,6 +324,12 @@ function closeLightbox(): void {
   lightboxSrc.value = ''
   lightboxSvg.value = ''
 }
+
+// 图片/图表放大时,系统返回键先收起放大层
+useBackLayerWhen(
+  computed(() => !!lightboxSrc.value || !!lightboxSvg.value),
+  closeLightbox,
+)
 
 function onClick(e: MouseEvent): void {
   const el = e.target as HTMLElement

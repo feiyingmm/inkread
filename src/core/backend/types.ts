@@ -102,4 +102,6 @@ export interface Backend {
   deleteEntry(repoId: string, path: string): Promise<void>
   /** 撤销单文件的本地修改(未跟踪文件=直接删除) */
   discardFile(repoId: string, path: string): Promise<void>
+  /** 仓库内相对路径 → 磁盘绝对路径(复制路径 / 在文件管理器中显示) */
+  absPath(repoId: string, path: string): Promise<string>
 }

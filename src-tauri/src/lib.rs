@@ -33,6 +33,11 @@ fn add_repo_local(app: AppHandle, state: State<'_, AppState>, path: String) -> R
     if !p.join(".git").exists() {
         return Err("所选目录不是 git 仓库(缺少 .git)".into());
     }
+    // 「有 .git 目录」≠「读得到里面的文件」。Android 分区存储下目录一律可见、文件却读不到,
+    // 不当场验一次就会得到一个「只有目录没有文件、git 状态不可用」的空壳文库(v0.3.3 的真实故障)。
+    if let Err(e) = git2::Repository::open(&p) {
+        return Err(format!("{}{}", storage_hint(), e.message()));
+    }
     let name = p
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -270,6 +275,28 @@ fn write_binary(app: AppHandle, repo_id: String, path: String, base64: String) -
     std::fs::write(&abs, bytes).map_err(|e| format!("写入失败: {e}"))
 }
 
+/// Android 分区存储下的写入被拒(EPERM/EACCES)不是"未知错误",而是缺权限。
+/// 只报 `Operation not permitted (os error 1)` 用户根本不知道该干什么,这里补上出路。
+fn storage_hint() -> &'static str {
+    #[cfg(target_os = "android")]
+    {
+        "墨阅没有访问该目录的权限。请到 系统设置 → 应用 → 墨阅 → 权限,开启「所有文件访问」后重试。原因: "
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        ""
+    }
+}
+
+fn fs_err(action: &str, e: std::io::Error) -> String {
+    let denied = e.kind() == std::io::ErrorKind::PermissionDenied || e.raw_os_error() == Some(1);
+    if denied {
+        format!("{action}失败:{}{e}", storage_hint())
+    } else {
+        format!("{action}失败: {e}")
+    }
+}
+
 /// 新建空文档(父目录自动创建;已存在则拒绝)
 #[tauri::command(async)]
 fn create_file(app: AppHandle, repo_id: String, path: String) -> Result<(), String> {
@@ -279,9 +306,9 @@ fn create_file(app: AppHandle, repo_id: String, path: String) -> Result<(), Stri
         return Err("同名文件已存在".into());
     }
     if let Some(parent) = abs.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(parent).map_err(|e| fs_err("创建", e))?;
     }
-    std::fs::write(&abs, "").map_err(|e| format!("创建失败: {e}"))
+    std::fs::write(&abs, "").map_err(|e| fs_err("创建", e))
 }
 
 /// 新建文件夹;内置 .gitkeep 占位(空目录进不了 git,多端同步会丢)
@@ -292,8 +319,8 @@ fn create_dir(app: AppHandle, repo_id: String, path: String) -> Result<(), Strin
     if abs.exists() {
         return Err("同名目录已存在".into());
     }
-    std::fs::create_dir_all(&abs).map_err(|e| format!("创建失败: {e}"))?;
-    std::fs::write(abs.join(".gitkeep"), "").map_err(|e| e.to_string())
+    std::fs::create_dir_all(&abs).map_err(|e| fs_err("创建", e))?;
+    std::fs::write(abs.join(".gitkeep"), "").map_err(|e| fs_err("创建", e))
 }
 
 /// 重命名文件或文件夹(仓库内移动)
@@ -311,7 +338,7 @@ fn rename_entry(app: AppHandle, repo_id: String, from: String, to: String) -> Re
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::rename(&src, &dst).map_err(|e| format!("重命名失败: {e}"))
+    std::fs::rename(&src, &dst).map_err(|e| fs_err("重命名", e))
 }
 
 /// 删除文件或文件夹(文件夹递归删除);不允许删仓库根
@@ -326,9 +353,9 @@ fn delete_entry(app: AppHandle, repo_id: String, path: String) -> Result<(), Str
         return Err("目标不存在".into());
     }
     if abs.is_dir() {
-        std::fs::remove_dir_all(&abs).map_err(|e| format!("删除失败: {e}"))
+        std::fs::remove_dir_all(&abs).map_err(|e| fs_err("删除", e))
     } else {
-        std::fs::remove_file(&abs).map_err(|e| format!("删除失败: {e}"))
+        std::fs::remove_file(&abs).map_err(|e| fs_err("删除", e))
     }
 }
 
@@ -388,17 +415,65 @@ fn export_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))
 }
 
-/// Android:探测是否已获得「所有文件访问」权限(可读外部存储根)
-#[tauri::command]
+/// Android:探测是否真的拿到了「所有文件访问」(MANAGE_EXTERNAL_STORAGE)。
+///
+/// v0.3.3 用 `read_dir("/storage/emulated/0").is_ok()` 判断,这是**假阳性**:
+/// Android 11+ 任何应用都能列出共享存储的目录名,但读不到别的应用/adb 写进去的文件,
+/// 也不能在 Documents/Download 这类标准集合以外写入。真机复现的连锁后果是——
+/// 权限没给却照常放行 → 文件树只剩目录(文件 stat 不到被静默跳过)、
+/// `.git` 读不了导致「git 状态不可用」、新建文档报 `Operation not permitted (os error 1)`。
+///
+/// 改为**能力探测**:在共享存储根目录写一个探针文件再删掉。写得进去 = 真有权限。
+#[tauri::command(async)]
 fn check_storage_access() -> bool {
     #[cfg(target_os = "android")]
     {
-        std::fs::read_dir("/storage/emulated/0").is_ok()
+        let probe = std::path::Path::new("/storage/emulated/0/.inkread_permission_probe");
+        match std::fs::write(probe, b"") {
+            Ok(()) => {
+                let _ = std::fs::remove_file(probe);
+                true
+            }
+            Err(_) => false,
+        }
     }
     #[cfg(not(target_os = "android"))]
     {
         true
     }
+}
+
+/// Android:返回键在「已经没有任何层可关」时把 App 收到后台。
+/// 注意不是退出进程——用户按返回只是想离开,再点图标应当回到原来的阅读位置。
+#[tauri::command]
+fn minimize_app(_window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        _window
+            .with_webview(|webview| {
+                webview.jni_handle().exec(|env, activity, _webview| {
+                    let _ = env.call_method(
+                        activity,
+                        "moveTaskToBack",
+                        "(Z)Z",
+                        &[jni::objects::JValue::Bool(1)],
+                    );
+                });
+            })
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
+}
+
+/// 仓库内相对路径 → 磁盘绝对路径(「复制绝对路径」「打开所在目录」用)
+#[tauri::command(async)]
+fn abs_path(app: AppHandle, repo_id: String, path: String) -> Result<String, String> {
+    let root = state::repo_path(&app, &repo_id)?;
+    let abs = state::resolve_in_repo(&root, &path)?;
+    Ok(abs.to_string_lossy().to_string())
 }
 
 /// Android:沉浸式全屏——隐藏/恢复系统状态栏与导航栏(阅读时点正文空白切换)
@@ -646,32 +721,108 @@ fn serve_repo_asset(app: &AppHandle, uri_path: &str) -> Result<(Vec<u8>, &'stati
 /// 结果是**任何 HTTPS 都报 "the SSL certificate is invalid"**,拉取/克隆/推送全废。
 /// (桌面端不受影响:Windows 上 libgit2 走 WinHTTP,用系统证书库。)
 ///
-/// 解法是把 Mozilla CA bundle 打进包里,启动时释放到应用数据目录再指给 libgit2
-/// (OpenSSL 只认真实文件路径,读不了 APK 里的 asset)。
+/// v0.3.3 的做法是把 bundle 释放到应用数据目录、再用 `git2::opts::set_ssl_cert_file`
+/// 指给 libgit2 —— **原理上就不可能成功**,真机 logcat 里是:
+/// `failed to load certificates: error:05880020:x509 certificate routines::BIO lib`。
+///
+/// 原因在 `openssl-src` 的构建脚本里(lib.rs,注释原文):
+/// > On Android it looks like not passing `no-stdio` may cause a build failure (#13),
+/// > but most other platforms need it for things like **loading system certificates**
+/// > so only disable it on Android.
+///
+/// 即 Android 版 vendored OpenSSL 带着 `OPENSSL_NO_STDIO` 编译,`BIO_new_file()` 不可用,
+/// **任何"给一个证书文件路径"的接口在 Android 上都是死路**(桌面端不受影响)。
+///
+/// 所以只能走内存:把 PEM 用内存 BIO 逐张解析成 X509,经 `GIT_OPT_ADD_SSL_X509_CERT`
+/// 塞进 libgit2 的信任库。git2 没包装这个选项,故直接调 libgit2-sys 的 FFI。
 #[cfg(target_os = "android")]
-fn install_ca_bundle(app: &AppHandle) {
+fn install_ca_bundle(_app: &AppHandle) {
     const CA_BUNDLE: &[u8] = include_bytes!("../assets/cacert.pem");
-    let Ok(dir) = app.path().app_data_dir() else {
-        eprintln!("[inkread] 取不到 app_data_dir,CA 证书未安装");
-        return;
-    };
-    if std::fs::create_dir_all(&dir).is_err() {
-        return;
+    match load_ca_bundle_in_memory(CA_BUNDLE) {
+        Ok(n) => eprintln!("[inkread] CA 根证书已内存装载 {n} 张"),
+        Err(e) => eprintln!("[inkread] CA 根证书装载失败: {e} —— HTTPS git 操作会报证书无效"),
     }
-    let path = dir.join("cacert.pem");
-    // 体积一致就认为是同一份,避免每次启动都写 229KB
-    let stale = std::fs::metadata(&path)
-        .map(|m| m.len() != CA_BUNDLE.len() as u64)
-        .unwrap_or(true);
-    if stale {
-        if let Err(e) = std::fs::write(&path, CA_BUNDLE) {
-            eprintln!("[inkread] 写出 CA 证书失败: {e}");
-            return;
-        }
+}
+
+/// 手写的 OpenSSL FFI 声明。
+///
+/// 这些符号已经随 vendored OpenSSL 静态链进本 so 了,链接期能解析到;
+/// 之所以不直接依赖 `openssl-sys`,是因为把它提成直接依赖会改变 cargo 的构建指纹,
+/// 触发整个 vendored OpenSSL 重新编译(本机跑一次十几分钟且依赖 perl/NDK 环境)。
+/// 用到的都是 OpenSSL 3 的稳定公开 C API,签名不会变。
+#[cfg(target_os = "android")]
+mod openssl_ffi {
+    use std::os::raw::{c_int, c_void};
+
+    #[repr(C)]
+    pub struct Bio {
+        _private: [u8; 0],
     }
+    #[repr(C)]
+    pub struct X509 {
+        _private: [u8; 0],
+    }
+
+    extern "C" {
+        pub fn BIO_new_mem_buf(buf: *const c_void, len: c_int) -> *mut Bio;
+        pub fn BIO_free_all(bio: *mut Bio);
+        /// 第 3/4 参分别是密码回调与其 userdata,读公开证书用不到,一律传空
+        pub fn PEM_read_bio_X509(
+            bio: *mut Bio,
+            out: *mut *mut X509,
+            cb: *mut c_void,
+            u: *mut c_void,
+        ) -> *mut X509;
+        pub fn X509_free(cert: *mut X509);
+        pub fn ERR_clear_error();
+    }
+}
+
+/// 把 PEM bundle 逐张解析并加入 libgit2 的 X509 信任库,返回成功装载的张数。
+/// libgit2 的 `git_openssl__add_x509_cert` 内部走 `X509_STORE_add_cert`,会自行 up-ref,
+/// 所以这里每张证书用完立刻 `X509_free`,不泄漏。
+#[cfg(target_os = "android")]
+fn load_ca_bundle_in_memory(pem: &[u8]) -> Result<usize, String> {
+    use std::os::raw::{c_int, c_void};
+
+    // git_libgit2_opts 要求 libgit2 已初始化;run() 里 set_verify_owner_validation 已经拉起过,
+    // 这里再借一次(幂等)保证任何调用顺序下都安全。
     unsafe {
-        if let Err(e) = git2::opts::set_ssl_cert_file(&path) {
-            eprintln!("[inkread] 设置 CA 证书路径失败: {}", e.message());
+        git2::opts::set_verify_owner_validation(false).map_err(|e| e.message().to_string())?;
+    }
+
+    unsafe {
+        let bio = openssl_ffi::BIO_new_mem_buf(pem.as_ptr() as *const c_void, pem.len() as c_int);
+        if bio.is_null() {
+            return Err("BIO_new_mem_buf 返回空".into());
+        }
+        let mut loaded = 0usize;
+        loop {
+            let cert = openssl_ffi::PEM_read_bio_X509(
+                bio,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+            if cert.is_null() {
+                break;
+            }
+            let rc = libgit2_sys::git_libgit2_opts(
+                libgit2_sys::GIT_OPT_ADD_SSL_X509_CERT as c_int,
+                cert,
+            );
+            openssl_ffi::X509_free(cert);
+            if rc == 0 {
+                loaded += 1;
+            }
+        }
+        openssl_ffi::BIO_free_all(bio);
+        // 读到 bundle 末尾会压一条 PEM_R_NO_START_LINE 进错误队列,不清掉会污染后续报错
+        openssl_ffi::ERR_clear_error();
+        if loaded == 0 {
+            Err("一张证书都没装上".into())
+        } else {
+            Ok(loaded)
         }
     }
 }
@@ -757,6 +908,8 @@ pub fn run() {
             check_storage_access,
             request_storage_access,
             set_immersive,
+            minimize_app,
+            abs_path,
             list_dirs,
             open_path,
             take_launch_file

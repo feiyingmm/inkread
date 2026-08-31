@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { errMsg } from '@/core/errmsg'
 import { isMainWindow } from '@/core/window'
 import { backend, type GitOpResult, type GitStatus, type RepoMeta, type TreeNode } from '@/core/backend'
+import { sortTree } from '@/core/tree-sort'
 
 export const useRepoStore = defineStore('repo', () => {
   const repos = ref<RepoMeta[]>([])
@@ -45,7 +46,8 @@ export const useRepoStore = defineStore('repo', () => {
   }
 
   async function refresh() {
-    tree.value = await backend.listTree(currentRepoId.value)
+    // 显示顺序统一在前端裁决(两个后端的排序规则不一致,见 tree-sort.ts)
+    tree.value = sortTree(await backend.listTree(currentRepoId.value))
     refreshStatus()
   }
 

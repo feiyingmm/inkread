@@ -24,6 +24,19 @@ if [ -d src-tauri/icons/android ]; then
   echo "已应用品牌图标"
 fi
 
+# 宿主 Activity:把系统内边距/软键盘高度写成 CSS 变量喂给 WebView。
+# targetSdk 35+ 强制边到边后 adjustResize 失效,不做这一步键盘会盖住弹层输入框;
+# 同时 Android WebView 的 env(safe-area-inset-*) 恒为 0,顶栏让位/底部手势条也要靠它。
+# gen/ 不入 git,每次 init 都会被模板覆盖,所以必须在这里刷回去。
+ACT_SRC=src-tauri/android/MainActivity.kt
+ACT_DST=$(find src-tauri/gen/android/app/src/main/java -name MainActivity.kt 2>/dev/null | head -1)
+if [ -f "$ACT_SRC" ] && [ -n "$ACT_DST" ]; then
+  cp "$ACT_SRC" "$ACT_DST"
+  echo "已应用自定义 MainActivity -> $ACT_DST"
+else
+  echo "警告: 未能应用自定义 MainActivity(src=$ACT_SRC dst=$ACT_DST)" >&2
+fi
+
 # BuildTask 的 CLI runner:init 时若经 `node tauri.js` 启动会被记成 node 绝对路径,
 # 导致 gradle 执行 `node tauri ...` 失败;统一改为 npx(gradle 会自动尝试 npx.cmd)
 BT=$(ls src-tauri/gen/android/buildSrc/src/main/java/*/*/*/kotlin/BuildTask.kt 2>/dev/null | head -1)
