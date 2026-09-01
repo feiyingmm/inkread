@@ -4,8 +4,11 @@ import type {
   Backend,
   EntryInfo,
   FileContent,
+  FontManifest,
+  FontProgress,
   GitOpResult,
   GitStatus,
+  InstalledFont,
   RepoMeta,
   SearchHit,
   TreeNode,
@@ -40,4 +43,15 @@ export const tauriBackend: Backend = {
   discardFile: (repoId, path) => invoke<void>('git_discard_file', { repoId, path }),
   absPath: (repoId, path) => invoke<string>('abs_path', { repoId, path }),
   entryInfo: (repoId, path) => invoke<EntryInfo>('entry_info', { repoId, path }),
+  fontManifest: () => invoke<FontManifest>('font_manifest'),
+  fontInstalled: () => invoke<InstalledFont[]>('font_installed'),
+  fontInstall: (meta) => invoke<InstalledFont>('font_install', { meta }),
+  fontUninstall: (id) => invoke<void>('font_uninstall', { id }),
+  // convertFileSrc 会按平台拼出正确形态:Windows/Android 是 http://inkfont.localhost/<id>,
+  // 其余平台是 inkfont://localhost/<id>
+  fontUrl: (id) => convertFileSrc(id, 'inkfont'),
+  onFontProgress: async (cb) => {
+    const { listen } = await import('@tauri-apps/api/event')
+    return listen<FontProgress>('font-progress', (e) => cb(e.payload))
+  },
 }

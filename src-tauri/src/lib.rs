@@ -1,3 +1,4 @@
+mod fonts;
 mod fsops;
 mod gitops;
 mod state;
@@ -718,6 +719,31 @@ fn list_token_hosts(app: AppHandle) -> Result<Vec<String>, String> {
     Ok(hosts)
 }
 
+// ---- 可下载字体扩展 ----
+
+/// 远端字体清单(两源自动切换;都不通则退回上次缓存,离线也有东西可看)
+#[tauri::command(async)]
+fn font_manifest(app: AppHandle) -> Result<fonts::Manifest, String> {
+    fonts::fetch_manifest(&app)
+}
+
+/// 本机已安装的扩展字体
+#[tauri::command(async)]
+fn font_installed(app: AppHandle) -> Result<Vec<fonts::InstalledFont>, String> {
+    Ok(fonts::load_installed(&app))
+}
+
+/// 下载并安装一款字体。进度通过 `font-progress` 事件回传
+#[tauri::command(async)]
+fn font_install(app: AppHandle, meta: fonts::FontMeta) -> Result<fonts::InstalledFont, String> {
+    fonts::install(&app, &meta)
+}
+
+#[tauri::command(async)]
+fn font_uninstall(app: AppHandle, id: String) -> Result<(), String> {
+    fonts::uninstall(&app, &id)
+}
+
 #[tauri::command]
 fn get_token(app: AppHandle, host: String) -> Result<Option<String>, String> {
     Ok(state::load_tokens(&app).get(&host).cloned())
@@ -917,6 +943,26 @@ pub fn run() {
                     .unwrap(),
             }
         })
+        // 已下载的扩展字体:从应用数据目录流式返回给 WebView 的 @font-face。
+        // 不走 IPC —— 10MB 字体转 base64 约 13MB 字符串,每次启动都来一遍会把启动卡死。
+        .register_uri_scheme_protocol("inkfont", |ctx, request| {
+            let app = ctx.app_handle();
+            let id = percent_decode_str(request.uri().path().trim_start_matches('/'))
+                .decode_utf8_lossy()
+                .to_string();
+            match fonts::read_font(app, &id) {
+                Ok((bytes, mime)) => tauri::http::Response::builder()
+                    .header("Content-Type", mime)
+                    .header("Access-Control-Allow-Origin", "*")
+                    .header("Cache-Control", "public, max-age=31536000")
+                    .body(bytes)
+                    .unwrap(),
+                Err(e) => tauri::http::Response::builder()
+                    .status(404)
+                    .body(e.into_bytes())
+                    .unwrap(),
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             list_repos,
             add_repo_local,
@@ -941,6 +987,10 @@ pub fn run() {
             save_token,
             list_token_hosts,
             get_token,
+            font_manifest,
+            font_installed,
+            font_install,
+            font_uninstall,
             export_file,
             check_storage_access,
             request_storage_access,

@@ -673,6 +673,10 @@ defineExpose({ save, isDirty, scrollToSlug, formatJsonBlocks, openFind })
 }
 :deep(.vditor-ir .vditor-reset) {
   font-size: var(--prose-size);
+  /* 字体与行高跟随「阅读」里的设置,写和读用同一套观感;
+     字间距/首行缩进不跟随 —— 编辑时字符位置要和源码对得上,缩进会干扰定位 */
+  font-family: var(--font-body);
+  line-height: var(--prose-line);
   max-width: 52em;
   margin: 0 auto;
   /* 底部留一屏三成的空白(Typora / 语雀同款):最后几个标题也能被大纲滚到顶部,

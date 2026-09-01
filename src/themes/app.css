@@ -83,6 +83,9 @@ button {
   box-shadow: var(--shadow-card);
   overflow: hidden;
   transition: background 0.25s ease;
+  /* 边缘悬浮浮层(.side.is-peek / .toc.is-peek)的定位父级;
+     overflow:hidden 顺带把浮层的滑入动画裁在卡片内 */
+  position: relative;
 }
 
 /* 三列必须显式定位:手机上 .side 变成绝对定位抽屉、.toc 被隐藏后,
@@ -111,6 +114,33 @@ button {
 .side.is-closed {
   width: 0;
   border-right: none;
+}
+/* 边缘悬浮态:绝对定位脱离三列网格流,第 1 列塌成 0 宽 —— 正文一个像素都不动。
+   进出场沿用 .side 自带的 width 过渡(与点按钮收展同一种观感),不另加动画。
+   z-index 38 的取值见 .edge-hot 处的注释。 */
+.side.is-peek {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 38;
+  border-right: 1px solid var(--line);
+  box-shadow: 8px 0 28px rgba(10, 25, 41, 0.22);
+}
+/* 头部那颗按钮在桌面平时是隐藏的(display:none,只给手机端当返回键用);
+   悬浮态要靠它做「钉住」,这里放出来并收成桌面尺寸 */
+.side.is-peek .side-close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+}
+
+/* 悬浮浮层收起的那一帧:摘掉绝对定位回网格流 + 宽度归零同时发生,
+   这次宽度变化必须瞬时 —— 走过渡的话会以「网格流里的 264px」起步,
+   正文当场被推开再滑回来。详见 core/edge-peek.ts 的 snap 注释。 */
+.side.is-snap,
+.toc.is-snap {
+  transition: none;
 }
 
 .side-head {
@@ -469,6 +499,37 @@ button {
   background: var(--accent);
 }
 
+/* 边缘悬浮触发热区(桌面,仅在对应侧栏收起时渲染)。
+   贴的是「窗口」最外边而不是卡片边:.shell 有 22/26px 留白,只有贴窗口边才能
+   实现「把鼠标甩到屏幕最左」就唤出,最大化窗口时尤其顺手;这 10px 落在留白上,
+   不遮任何可点内容。
+
+   z-index 分层(浮层 38 / 热区 37)是上下夹逼出来的:
+     必须压过 —— .back-top 34、编辑器内浮层 30、.resizer 25
+     必须低于 —— .repo-menu-mask 39、.ctx-mask/.ctx-menu 46/47、.mask 50、
+                 .lightbox 60、.toasts 70
+   低于 .mask 是有意为之:设置/命令面板等全屏遮罩会盖住热区,
+   弹层开着时鼠标扫过窗口边缘就不会误触发。 */
+.edge-hot {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: 37;
+}
+.edge-hot--left {
+  left: 0;
+}
+.edge-hot--right {
+  right: 0;
+}
+/* 触屏设备上 hover 要么不触发、要么点一下就粘住,直接关掉 */
+@media (hover: none) {
+  .edge-hot {
+    display: none;
+  }
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -684,6 +745,26 @@ button {
   overflow-x: hidden;
 }
 
+/* 正文滚动条:轨道恒定 14px,平时只画一条 5px 细线,鼠标进到正文区就加粗到 10px。
+   加粗改的是 thumb 的透明边框(background-clip: content-box),轨道宽度自始至终不变
+   —— 所以变粗不会让正文重排;而且抓取区**一直**是 14px,细的时候照样一按就中。
+   触发条件用 .content:hover 而不是"悬到条上":原生滚动条没有能被 CSS 命中的
+   hover 目标,而拖动过程中指针会离开那条竖线,靠指针位置判定会在拖到一半时变细。 */
+.content::-webkit-scrollbar {
+  width: 14px;
+}
+.content::-webkit-scrollbar-thumb {
+  border-width: 4.5px;
+}
+.content:hover::-webkit-scrollbar-thumb {
+  border-width: 2px;
+}
+.content::-webkit-scrollbar-thumb:hover,
+.content::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: var(--scroll-thumb-strong);
+}
+
 /* 欢迎态 */
 .welcome {
   height: 100%;
@@ -740,6 +821,16 @@ button {
   width: 0;
   border-left: none;
   padding: 0;
+}
+/* 大纲的边缘悬浮态(与 .side.is-peek 镜像) */
+.toc.is-peek {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 38;
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 28px rgba(10, 25, 41, 0.22);
 }
 /* 目录头部:标题 + 折叠全部/展开全部 */
 .toc-head {
@@ -844,11 +935,25 @@ button {
   border-color: var(--accent-deep);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
+/* 色卡直接写死渐变端点(与 tokens.css 各品牌的 --g1/--g3 一致):
+   色卡要同时展示 6 套配色,不能靠当前生效的 CSS 变量 */
 .swatch--ink {
   background: linear-gradient(135deg, #122c47, #4a7c93);
 }
 .swatch--violet {
   background: linear-gradient(135deg, #6d5bd0, #c084fc);
+}
+.swatch--forest {
+  background: linear-gradient(135deg, #14392c, #55886e);
+}
+.swatch--amber {
+  background: linear-gradient(135deg, #4a2c14, #c08a52);
+}
+.swatch--rose {
+  background: linear-gradient(135deg, #4a2338, #c082a0);
+}
+.swatch--slate {
+  background: linear-gradient(135deg, #23303a, #6c8091);
 }
 .set-range {
   width: 100%;
@@ -1152,6 +1257,7 @@ button {
   .search-nav,
   .read-progress,
   .resizer,
+  .edge-hot,
   .toasts,
   .fold-btn,
   .code-copy {
@@ -1521,6 +1627,15 @@ button {
   .side.is-closed {
     width: 100%;
     transform: translateX(-102%);
+  }
+  /* 兜底:边缘悬浮是桌面专属。窄屏 .side 本就是整屏绝对定位抽屉,这里只需把
+     浮层特有的边框/投影/动画抹平,免得残留状态画出一条竖线和阴影
+     (JS 在断点切换时会清空 peek,这条只防万一) */
+  .side.is-peek {
+    width: 100%;
+    border-right: none;
+    box-shadow: none;
+    animation: none;
   }
   .side-head {
     padding: 8px 12px 8px 6px;

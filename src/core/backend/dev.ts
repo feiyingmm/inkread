@@ -66,4 +66,12 @@ export const devBackend: Backend = {
   discardFile: (repo, path) => post<void>(`/api/discard-file?repo=${enc(repo)}&path=${enc(path)}`),
   absPath: (repo, path) => get<{ path: string }>(`/api/abs-path?repo=${enc(repo)}&path=${enc(path)}`).then((r) => r.path),
   entryInfo: (repo, path) => get<EntryInfo>(`/api/entry-info?repo=${enc(repo)}&path=${enc(path)}`),
+  // 字体扩展要落盘到应用数据目录、并靠 Rust 注册的 inkfont 协议加载,浏览器里两样都没有。
+  // 开发模式下字体页只剩「内置」与「本机系统字体」两区,那两区是纯前端探测,照常可用。
+  fontManifest: () => Promise.resolve({ version: 0, fonts: [] }),
+  fontInstalled: () => Promise.resolve([]),
+  fontInstall: () => Promise.reject(new Error('开发模式不支持下载字体,请在打包后的应用里使用')),
+  fontUninstall: () => Promise.resolve(),
+  fontUrl: () => '',
+  onFontProgress: () => Promise.resolve(() => {}),
 }

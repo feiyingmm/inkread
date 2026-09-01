@@ -1,7 +1,12 @@
 <template>
   <div class="shell">
     <div class="card">
-      <aside class="side" :class="{ 'is-closed': !sideOpen }" :style="sideStyle">
+      <aside
+        ref="sideEl"
+        class="side"
+        :class="{ 'is-closed': !sideVisible, 'is-peek': sidePeekOn, 'is-snap': sidePeek.snap.value }"
+        :style="sideStyle"
+      >
         <div class="side-head">
           <div class="side-logo">墨</div>
           <button class="repo-switch" title="切换 / 添加文库" @click="repoMenuOpen = !repoMenuOpen">
@@ -11,8 +16,13 @@
               <span class="repo-caret"><Icon name="chevron-down" :size="11" /></span>
             </div>
           </button>
-          <button class="side-close" :title="isNarrow ? '返回' : '收起文库'" @click="sideOpen = false">
-            <Icon :name="isNarrow ? 'back' : 'close'" :size="20" />
+          <!-- 悬浮态下「收起」语义是绕的(本来就是收起状态),改成钉住:一键转常驻展开 -->
+          <button
+            class="side-close"
+            :title="sidePeekOn ? '钉住文库(常驻显示)' : isNarrow ? '返回' : '收起文库'"
+            @click="sidePeekOn ? pinSide() : (sideOpen = false)"
+          >
+            <Icon :name="sidePeekOn ? 'pin' : isNarrow ? 'back' : 'close'" :size="20" />
           </button>
           <template v-if="repoMenuOpen">
             <div class="repo-menu-mask" @click="repoMenuOpen = false"></div>
@@ -153,13 +163,21 @@
 
       <!-- 手机端目录走浮动球 + 整屏页(.toc 在窄屏 display:none),这里连内容都不必渲染 -->
       <TocPanel
+        ref="tocPanelRef"
         :items="toc"
         :active-slug="activeSlug"
-        :open="tocOpen && toc.length > 0 && !isNarrow"
+        :open="tocVisible"
+        :peek="tocPeekOn"
+        :class="{ 'is-snap': tocPeek.snap.value }"
         :style="tocStyle"
         @jump="onTocJump"
+        @pin="pinToc"
       />
     </div>
+
+    <!-- 边缘触发热区:收起态下把鼠标甩到窗口最左/最右即可临时唤出对应面板 -->
+    <div v-if="canPeekSide" class="edge-hot edge-hot--left" @mouseenter="sidePeek.arm($event)"></div>
+    <div v-if="canPeekToc" class="edge-hot edge-hot--right" @mouseenter="tocPeek.arm($event)"></div>
 
     <SettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
     <Palette
@@ -350,6 +368,7 @@ import Icon from '@/components/Icon.vue'
 import { backend, isTauri } from '@/core/backend'
 import { copyText } from '@/core/clipboard'
 import { installAndroidBackHandler, popLayer, useBackLayerWhen } from '@/core/backstack'
+import { useEdgePeek } from '@/core/edge-peek'
 import { checkStorageAccess, markPrompted, shouldPromptOnLaunch } from '@/core/storage-perm'
 import { useRepoStore } from '@/stores/repo'
 import { useSettings } from '@/stores/settings'
@@ -779,18 +798,63 @@ async function pickLocalRepo(): Promise<void> {
 
 const repoMenuOpen = ref(false)
 
+// ---- 桌面端边缘悬浮:收起态下鼠标贴到窗口最左/最右,浮层临时唤出对应面板 ----
+const sideEl = ref<HTMLElement | null>(null)
+const tocPanelRef = ref<InstanceType<typeof TocPanel> | null>(null)
+
+/**
+ * 浮层内能拉起的三个菜单还开着时不许收起 —— 它们的遮罩是全屏 fixed 元素,
+ * 指针在几何上已经"不在浮层里"了,不加这道锁菜单一弹浮层就从脚下消失。
+ * 全屏模态(设置 / 新建 / 重命名 / 文件信息)不在此列:它们盖住整屏,
+ * 浮层在不在后面无所谓,关掉时指针通常已离开边缘,收起才是对的。
+ */
+const peekLocked = (): boolean => repoMenuOpen.value || !!entryMenu.value || !!pullMenu.value
+
+const sidePeek = useEdgePeek(() => sideEl.value, 'left', peekLocked)
+const tocPeek = useEdgePeek(() => tocPanelRef.value?.rootEl, 'right')
+
+const canPeekSide = computed(() => !isNarrow.value && !sideOpen.value)
+const canPeekToc = computed(() => !isNarrow.value && !tocOpen.value && toc.value.length > 0)
+const sidePeekOn = computed(() => sidePeek.active.value && canPeekSide.value)
+const tocPeekOn = computed(() => tocPeek.active.value && canPeekToc.value)
+const sideVisible = computed(() => sideOpen.value || sidePeekOn.value)
+const tocVisible = computed(() => (tocOpen.value || tocPeekOn.value) && toc.value.length > 0 && !isNarrow.value)
+
+/** 悬浮态下点头部图钉:这次临时浮出转为常驻展开 */
+function pinSide(): void {
+  sidePeek.close()
+  sideOpen.value = true
+}
+function pinToc(): void {
+  tocPeek.close()
+  tocOpen.value = true
+}
+
+// 拖成手机布局(边缘悬浮是桌面专属)、或换到没有大纲的文档时,残留的浮层要当场收掉
+watch(isNarrow, (narrow) => {
+  if (!narrow) return
+  sidePeek.close()
+  tocPeek.close()
+})
+watch(
+  () => toc.value.length,
+  (n) => {
+    if (n === 0) tocPeek.close()
+  },
+)
+
 // ---- 侧栏宽度拖拽 ----
 const sideWidth = ref(Number(localStorage.getItem('inkread:sidew')) || 264)
 const tocWidth = ref(Number(localStorage.getItem('inkread:tocw')) || 232)
 const resizing = ref<'' | 'side' | 'toc'>('')
 
 const sideStyle = computed(() =>
-  sideOpen.value && !isNarrow.value
+  sideVisible.value && !isNarrow.value
     ? { width: `${sideWidth.value}px`, transition: resizing.value === 'side' ? 'none' : undefined }
     : undefined,
 )
 const tocStyle = computed(() =>
-  tocOpen.value && toc.value.length > 0 && !isNarrow.value
+  tocVisible.value
     ? { width: `${tocWidth.value}px`, transition: resizing.value === 'toc' ? 'none' : undefined }
     : undefined,
 )

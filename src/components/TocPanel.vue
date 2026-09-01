@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="toc" :class="{ 'is-closed': !open }">
+  <div ref="rootEl" class="toc" :class="{ 'is-closed': !open, 'is-peek': peek }">
     <template v-if="open">
       <div class="toc-head">
         <div class="toc-title">大纲</div>
@@ -11,6 +11,10 @@
           @click="toggleAll"
         >
           <Icon :name="allCollapsed ? 'expand-all' : 'collapse-all'" :size="15" />
+        </button>
+        <!-- 边缘悬浮态专属:把这次临时浮出转成常驻展开 -->
+        <button v-if="peek" class="toc-act" title="钉住大纲(常驻显示)" aria-label="钉住大纲" @click="emit('pin')">
+          <Icon name="pin" :size="15" />
         </button>
       </div>
       <TocTree
@@ -32,19 +36,26 @@ import TocTree from '@/components/TocTree.vue'
 import { ancestorSlugs, branchSlugs, buildTocTree } from '@/core/toc-tree'
 import type { TocItem } from '@/core/markdown/pipeline'
 
-const props = defineProps<{
-  items: TocItem[]
-  activeSlug: string
-  open: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    items: TocItem[]
+    activeSlug: string
+    open: boolean
+    /** 边缘悬浮态:浮层覆盖正文,头部多一颗「钉住」 */
+    peek?: boolean
+  }>(),
+  { peek: false },
+)
 
-const emit = defineEmits<{ jump: [slug: string] }>()
+const emit = defineEmits<{ jump: [slug: string]; pin: [] }>()
 
 const tree = computed(() => buildTocTree(props.items))
 const branches = computed(() => branchSlugs(tree.value))
 const trail = computed(() => ancestorSlugs(tree.value, props.activeSlug))
 
 const rootEl = ref<HTMLElement | null>(null)
+// 边缘悬浮的去留判定要拿这个面板的矩形(见 core/edge-peek.ts)
+defineExpose({ rootEl })
 
 /**
  * 长文档的大纲比面板高得多,当前标题很容易落在可视区外 —— 高亮了却看不见。

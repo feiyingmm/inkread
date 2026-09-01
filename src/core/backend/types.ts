@@ -79,6 +79,42 @@ export interface SearchHit {
   nameMatch: boolean
 }
 
+/** 远端字体清单里的一项 */
+export interface FontMeta {
+  id: string
+  /** 展示名,如「思源宋体」 */
+  name: string
+  /** CSS font-family 名 */
+  family: string
+  /** 仓库内文件名 */
+  file: string
+  size: number
+  sha256: string
+  license: string
+  source: string
+  category: string
+  desc: string
+}
+
+export interface FontManifest {
+  version: number
+  fonts: FontMeta[]
+}
+
+export interface InstalledFont {
+  id: string
+  name: string
+  family: string
+  file: string
+  size: number
+}
+
+export interface FontProgress {
+  id: string
+  received: number
+  total: number
+}
+
 /**
  * 前端唯一数据出口。
  * DevBackend(开发期,HTTP→Vite Node 中间件→系统 git/fs)
@@ -129,4 +165,16 @@ export interface Backend {
   absPath(repoId: string, path: string): Promise<string>
   /** 条目信息:大小 / 时间 / 行数字数 / 目录子项统计 */
   entryInfo(repoId: string, path: string): Promise<EntryInfo>
+  /** 可下载字体清单(两源自动切换;都不通时退回上次缓存,离线也有东西可看) */
+  fontManifest(): Promise<FontManifest>
+  /** 本机已安装的扩展字体 */
+  fontInstalled(): Promise<InstalledFont[]>
+  /** 下载并安装一款字体;进度经 onFontProgress 回传 */
+  fontInstall(meta: FontMeta): Promise<InstalledFont>
+  /** 卸载并删除字体文件 */
+  fontUninstall(id: string): Promise<void>
+  /** 已安装字体的 URL,直接写进 @font-face 的 src */
+  fontUrl(id: string): string
+  /** 订阅下载进度;返回取消订阅函数 */
+  onFontProgress(cb: (p: FontProgress) => void): Promise<() => void>
 }

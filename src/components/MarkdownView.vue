@@ -18,7 +18,7 @@
         v-else
         ref="proseEl"
         class="prose"
-        :class="{ 'is-wide': settings.width === 'wide', 'is-serif': settings.serifBody }"
+        :class="{ 'is-wide': settings.width === 'wide' }"
         v-html="html"
       ></div>
     </div>

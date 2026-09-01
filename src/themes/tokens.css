@@ -7,7 +7,14 @@
   --radius-lg: 18px;
   --radius: 10px;
   --radius-sm: 6px;
+  /* 正文排版:默认值 = v0.4.0 写死在 reading.css 里的取值,设置面板会覆写这几条。
+     --font-body 空着就跟随 --font-sans(即「系统默认」那一档) */
   --prose-size: 16px;
+  --font-body: var(--font-sans);
+  --prose-line: 1.78;
+  --prose-para: 0.85em;
+  --prose-ls: 0em;
+  --prose-indent: 0;
   --shadow-card: 0 10px 40px rgba(10, 25, 41, 0.28);
   --safe-top: 0px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -31,7 +38,8 @@
   --accent-deep: #1d4a68;
   --accent-soft: #eef4f7;
   --accent-line: #d9e6ec;
-  --code-fg: #c25232;
+  /* 2026-09-01 加深:原 #c25232 在 --code-bg 上只有 4.07,够不上 WCAG AA 的 4.5(现 5.06) */
+  --code-fg: #ad4526;
   --code-bg: #fbeee9;
   --link: #1f6f9c;
   --sel-bg: #2f5d7c;
@@ -47,10 +55,75 @@
   --accent-deep: #534ab7;
   --accent-soft: #f4f2fc;
   --accent-line: #e6e1f8;
-  --code-fg: #d4537e;
+  /* 2026-09-01 加深:原 #d4537e 在 --code-bg 上只有 3.50,够不上 WCAG AA 的 4.5(现 5.08) */
+  --code-fg: #b23a63;
   --code-bg: #fdeef3;
   --link: #6a5bd8;
   --sel-bg: #7c6ee6;
+  --sel-fg: #ffffff;
+}
+
+/* ---------- 品牌:竹青 ---------- */
+:root[data-brand='forest'] {
+  --g1: #14392c;
+  --g2: #2c5c48;
+  --g3: #55886e;
+  --accent: #3f6f5b;
+  --accent-deep: #2b5344;
+  --accent-soft: #edf5f0;
+  --accent-line: #d5e7dd;
+  --code-fg: #a8562a;
+  --code-bg: #fbf0e8;
+  --link: #2a6d52;
+  --sel-bg: #3f6f5b;
+  --sel-fg: #ffffff;
+}
+
+/* ---------- 品牌:秋赭 ---------- */
+:root[data-brand='amber'] {
+  --g1: #4a2c14;
+  --g2: #8a5228;
+  --g3: #c08a52;
+  --accent: #a5622f;
+  --accent-deep: #7f4720;
+  --accent-soft: #fbf2e9;
+  --accent-line: #f0e0cd;
+  --code-fg: #a1374f;
+  --code-bg: #fbeaef;
+  --link: #8d5220;
+  --sel-bg: #a5622f;
+  --sel-fg: #ffffff;
+}
+
+/* ---------- 品牌:黛粉 ---------- */
+:root[data-brand='rose'] {
+  --g1: #4a2338;
+  --g2: #8a4468;
+  --g3: #c082a0;
+  --accent: #a4557a;
+  --accent-deep: #7f3d5d;
+  --accent-soft: #fbeff5;
+  --accent-line: #f0dae6;
+  --code-fg: #a2542a;
+  --code-bg: #fbf0e9;
+  --link: #914c74;
+  --sel-bg: #a4557a;
+  --sel-fg: #ffffff;
+}
+
+/* ---------- 品牌:石墨(近中性,让内容彻底站前面) ---------- */
+:root[data-brand='slate'] {
+  --g1: #23303a;
+  --g2: #41525f;
+  --g3: #6c8091;
+  --accent: #4a5a68;
+  --accent-deep: #34424e;
+  --accent-soft: #f0f3f5;
+  --accent-line: #dde3e8;
+  --code-fg: #a9502f;
+  --code-bg: #fbeee9;
+  --link: #3d6178;
+  --sel-bg: #4a5a68;
   --sel-fg: #ffffff;
 }
 
@@ -66,6 +139,8 @@
   --line-strong: #d9e1e8;
   --table-head: #f5f8fa;
   --scroll-thumb: #ccd6de;
+  /* 正文滚动条加粗/按住时的深色态 */
+  --scroll-thumb-strong: #a3b3c0;
 
   --hl-comment: #93a1ad;
   --hl-kw: #7c4dbd;
@@ -89,6 +164,7 @@
   --line-strong: #2e3a46;
   --table-head: #1a222b;
   --scroll-thumb: #37434f;
+  --scroll-thumb-strong: #54636f;
   --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.5);
 
   --hl-comment: #5f6f7c;
@@ -129,4 +205,64 @@
   --code-bg: #2e1e28;
   --link: #a99af5;
   --sel-bg: #6a5acd;
+}
+
+/* 深色 × 竹青 */
+:root[data-mode='dark'][data-brand='forest'] {
+  --g1: #07120d;
+  --g2: #0d1f18;
+  --g3: #163026;
+  --accent: #6aa98d;
+  --accent-deep: #8cc4aa;
+  --accent-soft: #14211b;
+  --accent-line: #1e3329;
+  --code-fg: #e0a06a;
+  --code-bg: #2a2018;
+  --link: #79c39f;
+  --sel-bg: #3f6f5b;
+}
+
+/* 深色 × 秋赭 */
+:root[data-mode='dark'][data-brand='amber'] {
+  --g1: #17100a;
+  --g2: #251a10;
+  --g3: #382718;
+  --accent: #cf9159;
+  --accent-deep: #e2ac7c;
+  --accent-soft: #251b12;
+  --accent-line: #3a2a1b;
+  --code-fg: #e895ae;
+  --code-bg: #2c1d24;
+  --link: #dda471;
+  --sel-bg: #8a5228;
+}
+
+/* 深色 × 黛粉 */
+:root[data-mode='dark'][data-brand='rose'] {
+  --g1: #180d14;
+  --g2: #26141e;
+  --g3: #381f2d;
+  --accent: #ce8bab;
+  --accent-deep: #e2a8c2;
+  --accent-soft: #241820;
+  --accent-line: #382534;
+  --code-fg: #e0a06a;
+  --code-bg: #2b1f1a;
+  --link: #d99ab7;
+  --sel-bg: #8a4468;
+}
+
+/* 深色 × 石墨 */
+:root[data-mode='dark'][data-brand='slate'] {
+  --g1: #0b0f13;
+  --g2: #141a20;
+  --g3: #1f272f;
+  --accent: #8b9dab;
+  --accent-deep: #aabbc8;
+  --accent-soft: #191f25;
+  --accent-line: #29323a;
+  --code-fg: #e08a68;
+  --code-bg: #2b1f1a;
+  --link: #9db9cb;
+  --sel-bg: #41525f;
 }

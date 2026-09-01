@@ -10,16 +10,16 @@
   max-width: 46em;
   margin: 0 auto;
   font-size: var(--prose-size);
-  line-height: 1.78;
+  /* 字体与行高/字间距全部走变量,由设置面板的排版旋钮写进 documentElement */
+  font-family: var(--font-body);
+  line-height: var(--prose-line);
+  letter-spacing: var(--prose-ls);
   color: var(--t1);
   word-break: break-word;
   transition: max-width 0.25s ease;
 }
 .prose.is-wide {
   max-width: none;
-}
-.prose.is-serif {
-  font-family: var(--font-serif);
 }
 
 /* ---------- 标题(衬线) ---------- */
@@ -59,7 +59,17 @@
 }
 
 .prose p {
-  margin: 0.85em 0;
+  margin: var(--prose-para) 0;
+  text-indent: var(--prose-indent);
+}
+/* 首行缩进只该作用于成段的正文;列表项里的段落、独立图片段不缩。
+   两条**必须分开写**:`:has()` 在老 WebView 上不认识,写成选择器列表会把整条规则
+   一起废掉(CSS 的选择器列表不是宽容匹配),连列表项那条也跟着失效。 */
+.prose li > p {
+  text-indent: 0;
+}
+.prose p:has(> img:only-child) {
+  text-indent: 0;
 }
 
 .prose a {
@@ -511,7 +521,9 @@
   background: var(--accent-soft);
 }
 
-/* ---------- 阅读纸色(浅色模式下生效;深色模式忽略) ---------- */
+/* ---------- 阅读纸色 ----------
+   data-paper 由 settings 按当前明暗从 paperLight / paperDark 里选出来,
+   两边各自记忆 —— 切一次明暗不会把另一边的选择覆盖掉。 */
 :root[data-mode='light'][data-paper='sepia'] .content {
   background: #f7f0de;
 }
@@ -523,6 +535,26 @@
 }
 :root[data-mode='light'][data-paper='green'] .prose {
   color: #29392b;
+}
+:root[data-mode='light'][data-paper='ivory'] .content {
+  background: #faf7f0;
+}
+:root[data-mode='light'][data-paper='ivory'] .prose {
+  color: #33302a;
+}
+
+/* 深色纸色:暖夜(棕调,夜里久读不刺眼)/ 纯黑(OLED 省电、对比最高) */
+:root[data-mode='dark'][data-paper='warm'] .content {
+  background: #1a1613;
+}
+:root[data-mode='dark'][data-paper='warm'] .prose {
+  color: #d9cfc2;
+}
+:root[data-mode='dark'][data-paper='black'] .content {
+  background: #000000;
+}
+:root[data-mode='dark'][data-paper='black'] .prose {
+  color: #c8ced4;
 }
 
 /* ---------- 搜索高亮 ---------- */

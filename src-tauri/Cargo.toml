@@ -1,6 +1,6 @@
 [package]
 name = "inkread"
-version = "0.4.0"
+version = "0.5.0"
 description = "墨阅 —— 跨平台 Markdown 阅读应用"
 authors = ["mahonggeng"]
 edition = "2021"
@@ -21,6 +21,11 @@ serde_json = "1"
 git2 = "0.20"
 percent-encoding = "2"
 base64 = "0.22"
+# 字体扩展下载。走 rustls + webpki 内置根证书,刻意不复用 Android 那套 vendored OpenSSL:
+# 那份是 no-stdio 编译的,任何"给证书文件路径"的接口都是死路(见 install_ca_bundle 的注释),
+# 纯 Rust 的 TLS 栈能一次性绕开整类问题。
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-webpki-roots"] }
+sha2 = "0.10"
 
 # 桌面:单实例(双击 md 文件复用已开窗口)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
