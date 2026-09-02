@@ -1,6 +1,11 @@
 export interface RepoMeta {
   id: string
   name: string
+  /**
+   * 是不是 git 仓库。普通文件夹也能当文库(看本地小说、散落的 md),
+   * 这时同步/变更/拉取整套都不适用,UI 要把相关入口收起来。
+   */
+  git: boolean
 }
 
 /** 新窗口开机要打开什么:file(绝对路径,文件关联/命令行)与 repo+doc(应用内)二选一 */
@@ -129,6 +134,10 @@ export interface Backend {
   writeBinary(repoId: string, path: string, base64: string): Promise<void>
   /** 仓库内相对路径 → 可直接用于 <img src> 的 URL */
   assetUrl(repoId: string, path: string): string
+  /** 写文本到仓库外的任意路径(导出用;路径来自保存对话框) */
+  exportFile(path: string, content: string): Promise<void>
+  /** 同上,写二进制(导出 PNG 长图);base64 不带 data: 前缀 */
+  exportBinary(path: string, base64: string): Promise<void>
   gitStatus(repoId: string): Promise<GitStatus>
   gitPull(repoId: string): Promise<GitOpResult>
   /** 放弃本地一切未推送内容,强制与远端一致(reset --hard 到上游;未跟踪文件保留) */

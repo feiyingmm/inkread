@@ -2,8 +2,34 @@ import MarkdownIt from 'markdown-it'
 import anchor from 'markdown-it-anchor'
 import frontMatterPlugin from 'markdown-it-front-matter'
 import { katex } from '@mdit/plugin-katex'
-import hljs from 'highlight.js'
+/**
+ * 高亮**按需注册**,别 `import hljs from 'highlight.js'`。
+ *
+ * 主包会把 190+ 种语言全打进 bundle(实测 abnf、mathematica 这类都在里面),
+ * 主 chunk 因此涨到 1.9MB —— Android WebView 冷启动光解析编译这坨就要几百毫秒,
+ * 而文档里真正出现的语言不出这三十来种。
+ * `lib/common` 是官方精选的 36 种(bash/java/json/sql/xml/yaml/python/rust…),自带类型;
+ * 底下几个是写部署/运维文档常用、但没进 common 的,单独补上。
+ */
+import hljs from 'highlight.js/lib/common'
+import dockerfile from 'highlight.js/lib/languages/dockerfile'
+import groovy from 'highlight.js/lib/languages/groovy'
+import http from 'highlight.js/lib/languages/http'
+import nginx from 'highlight.js/lib/languages/nginx'
+import powershell from 'highlight.js/lib/languages/powershell'
+import properties from 'highlight.js/lib/languages/properties'
 import { resolvePath } from '@/core/paths'
+
+for (const [name, fn] of [
+  ['dockerfile', dockerfile],
+  ['groovy', groovy],
+  ['http', http],
+  ['nginx', nginx],
+  ['powershell', powershell],
+  ['properties', properties],
+] as const) {
+  hljs.registerLanguage(name, fn)
+}
 
 export interface TocItem {
   level: number

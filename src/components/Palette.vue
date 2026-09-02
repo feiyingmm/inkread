@@ -30,6 +30,7 @@
           >
             <span class="pi-name">{{ nameOf(f) }}</span>
             <span class="pi-path">{{ dirOfPath(f) }}</span>
+            <span v-if="showingRecent && metaOf(f)" class="pi-meta">{{ metaOf(f) }}</span>
           </button>
         </template>
 
@@ -65,6 +66,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { backend, type SearchHit, type TreeNode } from '@/core/backend'
 import { fuzzyFilter } from '@/core/fuzzy'
 import { fileKind } from '@/core/paths'
+import { listRecent, recentMeta } from '@/core/recent'
 import Icon from '@/components/Icon.vue'
 import { useBackLayer } from '@/core/backstack'
 
@@ -115,6 +117,20 @@ const fileHits = computed(() => {
   return fuzzyFilter(query.value, allFiles.value, (p) => p, 60)
 })
 const showingRecent = computed(() => !query.value.trim() && props.recent.length > 0)
+
+/**
+ * 「20 分钟前 · 读到 42%」。面板每次打开时快照一份,不在渲染里反复读 localStorage
+ * (键是按文档一条条存的,20 行就是 20 次同步读)。
+ */
+const recentAt = computed(() => {
+  const map = new Map<string, string>()
+  for (const d of listRecent(props.repoId)) map.set(d.path, recentMeta(props.repoId, d))
+  return map
+})
+
+function metaOf(path: string): string {
+  return recentAt.value.get(path) ?? ''
+}
 
 const flatSearch = computed<FlatHit[]>(() => searchHits.value.map((h, idx) => ({ ...h, idx })))
 

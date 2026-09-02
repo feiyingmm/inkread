@@ -30,6 +30,15 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
 
 const enc = encodeURIComponent
 
+/** 开发模式落盘:借浏览器下载,文件名取路径最后一段 */
+function download(path: string, blob: Blob): void {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = path.split(/[/\\]/).pop() || 'export'
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
 export const devBackend: Backend = {
   listRepos: () => get<RepoMeta[]>('/api/repos'),
   listTree: (repo) => get<TreeNode[]>(`/api/tree?repo=${enc(repo)}`),
@@ -39,6 +48,16 @@ export const devBackend: Backend = {
   writeBinary: (repo, path, base64) =>
     post<void>(`/api/write-binary?repo=${enc(repo)}&path=${enc(path)}`, { base64 }),
   assetUrl: (repo, path) => `/api/raw?repo=${enc(repo)}&path=${enc(path)}`,
+  // 开发模式没有保存对话框,退回浏览器下载
+  exportFile: (path, content) => {
+    download(path, new Blob([content], { type: 'text/plain;charset=utf-8' }))
+    return Promise.resolve()
+  },
+  exportBinary: (path, base64) => {
+    const bin = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+    download(path, new Blob([bin], { type: 'application/octet-stream' }))
+    return Promise.resolve()
+  },
   gitStatus: (repo) => get<GitStatus>(`/api/status?repo=${enc(repo)}`),
   gitPull: (repo) => post<GitOpResult>(`/api/pull?repo=${enc(repo)}`),
   gitPullForce: (repo) => post<GitOpResult>(`/api/pull-force?repo=${enc(repo)}`),

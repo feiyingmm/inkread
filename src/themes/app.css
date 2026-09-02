@@ -392,6 +392,106 @@ button {
   flex: 1;
 }
 
+/* 最近阅读(侧栏文件树上方的一小段) */
+.recent {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.recent-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--t3);
+  user-select: none;
+}
+.recent-head:hover {
+  color: var(--t1);
+}
+.rc-count {
+  font-size: 11px;
+  font-weight: 400;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--t3);
+}
+.recent-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 4px 8px 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+}
+.recent-row:hover {
+  background: var(--bg-hover);
+}
+.recent-row.is-on {
+  background: var(--accent-soft);
+}
+.rc-name {
+  max-width: 100%;
+  font-size: 13px;
+  color: var(--t1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-row.is-on .rc-name {
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+.rc-meta {
+  font-size: 11px;
+  color: var(--t3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.recent-more {
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--t3);
+}
+.recent-more:hover {
+  color: var(--accent-deep);
+}
+@media (max-width: 900px) {
+  .recent-row {
+    padding: 8px 10px 9px;
+  }
+  .rc-name {
+    font-size: 15px;
+  }
+  .rc-meta {
+    font-size: 12px;
+  }
+  .recent-head,
+  .recent-more {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+}
+
 /* 文件树 */
 .tree-item {
   user-select: none;
@@ -583,6 +683,10 @@ button {
 .crumbs .seg-link:hover {
   background: var(--bg-hover);
   color: var(--accent-deep);
+}
+/* epub 当前章名:比文件名淡一档,主次分明 */
+.crumbs .seg-sub {
+  color: var(--t3);
 }
 
 .tbtn {
@@ -1055,6 +1159,15 @@ button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 最近阅读那几行的「20 分钟前 · 读到 42%」,靠右对齐不跟路径抢位置 */
+.palette-item .pi-meta {
+  margin-left: auto;
+  padding-left: 10px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--t3);
+  white-space: nowrap;
 }
 .palette-item .pi-line {
   font-size: 11.5px;

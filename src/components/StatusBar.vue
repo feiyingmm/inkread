@@ -18,6 +18,8 @@
       </button>
       <span v-else-if="status.ahead === 0" class="sb-item sb-clean"><Icon name="check" :size="13" />已同步</span>
     </template>
+    <!-- 普通文件夹文库没有分支/变更可言,别报"git 状态不可用"吓人 -->
+    <span v-else-if="!isGit" class="sb-item"><Icon name="folder" :size="13" />本地文库</span>
     <span v-else class="sb-item">git 状态不可用</span>
     <span class="sb-flex"></span>
     <!-- 编辑模式的字数统计:选中时改报选中量(与语雀 / Typora 一致) -->
@@ -45,6 +47,8 @@ import Icon from '@/components/Icon.vue'
 
 defineProps<{
   status: GitStatus | null
+  /** 当前文库是不是 git 仓库;false 时状态栏不谈 git */
+  isGit: boolean
   syncing: boolean
   editMode: boolean
   autoSave: boolean

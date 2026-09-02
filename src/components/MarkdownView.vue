@@ -14,6 +14,8 @@
 
     <div class="prose-wrap">
       <div v-if="errorMsg" class="doc-error">{{ errorMsg }}</div>
+      <!-- 自带样式的 HTML 文档:原样渲染,不套 .prose(否则它的卡片布局会被我们的排版改掉) -->
+      <div v-else-if="htmlStyled" ref="proseEl" :class="HTML_DOC_SCOPE" v-html="html"></div>
       <div
         v-else
         ref="proseEl"
@@ -39,11 +41,13 @@ import { useBackLayerWhen } from '@/core/backstack'
 import { backend } from '@/core/backend'
 import { dirOf, extOf, fileKind } from '@/core/paths'
 import { highlightCode, renderMarkdown, renderPlainText, type TocItem } from '@/core/markdown/pipeline'
+import { HTML_DOC_SCOPE, renderHtmlDoc } from '@/core/html-doc'
 import { formatJson } from '@/core/json-format'
 import { transformInfoCards } from '@/core/markdown/infocard'
 import { buildFloatHead, headingText, markTallTables, setupCodeBlocks, setupHeadingAnchors } from '@/core/markdown/enhance'
 import { copyText } from '@/core/clipboard'
 import { renderMermaidBlocks } from '@/core/markdown/mermaid'
+import { loadPos, savePos, clearPos } from '@/core/reading-pos'
 import { useSettings } from '@/stores/settings'
 import { toast } from '@/core/toast'
 import Icon from '@/components/Icon.vue'
@@ -80,12 +84,10 @@ let loadSeq = 0
 let currentKind = ''
 let rawContent = ''
 const sourceMode = ref(false)
+/** 当前是"自带样式的 HTML 文档"——原样渲染,墨阅的排版与增强都不插手 */
+const htmlStyled = ref(false)
 let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 let searchRanges: Range[] = []
-
-function scrollKey(): string {
-  return `inkread:scroll:${props.repoId}:${props.path}`
-}
 
 function clearHighlights(): void {
   try {
@@ -102,19 +104,31 @@ function clearSearch(): void {
   searchNav.value = null
 }
 
-/** markdown 内容按当前视图模式(渲染/源码)生成 html */
+/** markdown / html 内容按当前视图模式(渲染/源码)生成 html */
 function renderNow(): void {
   if (sourceMode.value) {
-    html.value = renderPlainText(rawContent, 'markdown')
+    htmlStyled.value = false
+    html.value = renderPlainText(rawContent, currentKind === 'html' ? 'html' : 'markdown')
     emit('toc', [])
-  } else {
-    const result = renderMarkdown(rawContent, {
+    return
+  }
+  if (currentKind === 'html') {
+    const doc = renderHtmlDoc(rawContent, {
       docDir: dirOf(props.path),
       assetUrl: (p) => backend.assetUrl(props.repoId, p),
     })
-    html.value = result.html
-    emit('toc', result.toc)
+    htmlStyled.value = doc.styled
+    html.value = doc.html
+    emit('toc', doc.toc)
+    return
   }
+  htmlStyled.value = false
+  const result = renderMarkdown(rawContent, {
+    docDir: dirOf(props.path),
+    assetUrl: (p) => backend.assetUrl(props.repoId, p),
+  })
+  html.value = result.html
+  emit('toc', result.toc)
 }
 
 async function load(): Promise<void> {
@@ -136,7 +150,7 @@ async function load(): Promise<void> {
   try {
     if (kind === 'image') {
       html.value = `<p style="text-align:center"><img src="${backend.assetUrl(props.repoId, props.path)}" alt=""></p>`
-    } else if (kind === 'markdown') {
+    } else if (kind === 'markdown' || kind === 'html') {
       const file = await backend.readFile(props.repoId, props.path)
       if (seq !== loadSeq) return
       rawContent = file.content
@@ -162,19 +176,27 @@ async function load(): Promise<void> {
 function afterRender(): void {
   const root = proseEl.value
   if (!root) return
-  if (currentKind === 'markdown' && !sourceMode.value) {
-    transformInfoCards(root)
-    void renderMermaidBlocks(root, settings.isDark)
-    setupFolding(root)
-    setupHeadingAnchors(root)
-    markTallTables(root)
+  const rich = (currentKind === 'markdown' || currentKind === 'html') && !sourceMode.value
+  if (rich) {
+    // 自带样式的 HTML 原样呈现:折叠三角、标题锚点、表格包裹都会动它的 DOM 结构,
+    // 一动布局就跟浏览器里不一样了 —— 只收标题用于大纲高亮
+    if (!htmlStyled.value) {
+      // 信息卡与 mermaid 是 markdown 管线特有的产物,html 文档里不会有
+      if (currentKind === 'markdown') {
+        transformInfoCards(root)
+        void renderMermaidBlocks(root, settings.isDark)
+      }
+      setupFolding(root)
+      setupHeadingAnchors(root)
+      markTallTables(root)
+    }
     headings = Array.from(root.querySelectorAll<HTMLElement>('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]'))
   } else {
     headings = []
   }
-  setupCodeBlocks(root)
-  const saved = Number(localStorage.getItem(scrollKey()) ?? 0)
-  if (scroller.value) scroller.value.scrollTop = saved
+  if (!htmlStyled.value) setupCodeBlocks(root)
+  const saved = loadPos(props.repoId, props.path)
+  if (scroller.value) scroller.value.scrollTop = saved.top
   // 换文档要丢掉上一篇的表头副本
   floatWrap = null
   if (floatHeadEl.value) floatHeadEl.value.hidden = true
@@ -183,9 +205,9 @@ function afterRender(): void {
   emit('rendered')
 }
 
-/** 切换 源码 ↔ 渲染 视图(仅 markdown) */
+/** 切换 源码 ↔ 渲染 视图(markdown 与 html) */
 async function toggleSource(): Promise<void> {
-  if (currentKind !== 'markdown') return
+  if (currentKind !== 'markdown' && currentKind !== 'html') return
   sourceMode.value = !sourceMode.value
   emit('source-mode', sourceMode.value)
   clearSearch()
@@ -318,8 +340,9 @@ function onScroll(): void {
   updateFloatHead()
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
   scrollSaveTimer = setTimeout(() => {
-    if (el.scrollTop > 40) localStorage.setItem(scrollKey(), String(el.scrollTop))
-    else localStorage.removeItem(scrollKey())
+    // 进度一起存:最近阅读列表要显示「读到 42%」,那边算不出比例(不知道总高度)
+    if (el.scrollTop > 40) savePos(props.repoId, props.path, { top: el.scrollTop, pct: progress.value })
+    else clearPos(props.repoId, props.path)
   }, 250)
   if (headings.length) {
     const top = el.scrollTop + 90

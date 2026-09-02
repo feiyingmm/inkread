@@ -47,7 +47,7 @@
               </div>
               <div class="repo-menu-sep"></div>
               <button class="repo-item" @click="onAddLocal">
-                <span class="ri-icon"><Icon name="folder" :size="15" /></span>添加本地仓库…
+                <span class="ri-icon"><Icon name="folder" :size="15" /></span>添加本地文库…
               </button>
               <button class="repo-item" @click="onAddClone">
                 <span class="ri-icon"><Icon name="download" :size="15" /></span>克隆远程仓库…
@@ -56,6 +56,30 @@
           </template>
         </div>
         <div class="side-body" @contextmenu="onBlankMenu">
+          <!-- 最近阅读:接着上次读的往下读是最高频的动作,放在文件树上头 -->
+          <div v-if="recentDocs.length > 0" class="recent">
+            <button class="recent-head" @click="recentOpen = !recentOpen">
+              <Icon :name="recentOpen ? 'chevron-down' : 'chevron-right'" :size="12" />
+              最近阅读
+              <span class="rc-count">{{ recentDocs.length }}</span>
+            </button>
+            <template v-if="recentOpen">
+              <button
+                v-for="d in recentShown"
+                :key="d.path"
+                class="recent-row"
+                :class="{ 'is-on': d.path === currentPath }"
+                :title="d.path"
+                @click="openFile(d.path)"
+              >
+                <span class="rc-name">{{ d.path.split('/').pop() }}</span>
+                <span v-if="recentLabel(d)" class="rc-meta">{{ recentLabel(d) }}</span>
+              </button>
+              <button v-if="recentDocs.length > recentShown.length" class="recent-more" @click="openPalette('files')">
+                查看全部 {{ recentDocs.length }} 篇…
+              </button>
+            </template>
+          </div>
           <div v-if="repo.error" class="tree-empty">{{ repo.error }}</div>
           <div v-else-if="repo.loading" class="tree-empty">加载中…</div>
           <div v-else-if="repo.tree.length === 0" class="tree-empty">仓库为空<br /><span class="tree-empty-sub">右键 / 长按空白处可新建</span></div>
@@ -64,10 +88,10 @@
         <div class="side-foot">
           <button
             class="tbtn"
-            title="刷新文件列表;右键/长按:git 拉取选项"
+            :title="repo.currentIsGit ? '刷新文件列表;右键/长按:git 拉取选项' : '刷新文件列表'"
             :disabled="repo.pulling"
             @click="refreshLocal"
-            @contextmenu.prevent="pullMenu = { x: $event.clientX, y: $event.clientY }"
+            @contextmenu.prevent="repo.currentIsGit && (pullMenu = { x: $event.clientX, y: $event.clientY })"
           >
             <Icon name="refresh" :spin="repo.pulling" />
           </button>
@@ -98,10 +122,12 @@
           :class="{ 'chrome-hidden': chromeHidden }"
           :repo-name="repo.currentRepoId"
           :path="currentPath"
+          :suffix="isEbook || isPdf ? bookTitle : ''"
           :toc-open="tocOpen"
           :can-back="canBack"
           :can-forward="canForward"
           :can-edit="canEdit"
+          :can-source="canSource"
           :edit-mode="editMode"
           :dirty="editorDirty"
           :source-mode="sourceMode"
@@ -121,11 +147,30 @@
           <div class="big">墨阅</div>
           <div class="sub">让每一篇 Markdown 静静展开,如书页般被阅读</div>
           <div v-if="repo.repos.length === 0 && isTauri" class="welcome-actions">
-            <button class="opt" @click="isAndroid ? (localPathOpen = true) : pickLocalRepo()">添加本地 git 仓库…</button>
+            <button class="opt" @click="isAndroid ? (localPathOpen = true) : pickLocalRepo()">添加本地文库(文件夹)…</button>
             <button class="opt is-on" @click="cloneOpen = true">克隆远程仓库…</button>
           </div>
           <div v-else class="sub" style="opacity: 0.7">从左侧文库选择一篇文档开始</div>
         </div>
+        <PdfView
+          v-else-if="isPdf"
+          ref="pdfView"
+          :repo-id="repo.currentRepoId"
+          :path="currentPath"
+          @toc="toc = $event"
+          @rendered="onRendered"
+          @title="bookTitle = $event"
+        />
+        <EbookView
+          v-else-if="isEbook"
+          ref="ebookView"
+          :repo-id="repo.currentRepoId"
+          :path="currentPath"
+          @toc="toc = $event"
+          @active="activeSlug = $event"
+          @rendered="onRendered"
+          @title="bookTitle = $event"
+        />
         <MarkdownView
           v-else-if="!editMode"
           ref="mdView"
@@ -152,6 +197,7 @@
         <StatusBar
           :class="{ 'chrome-hidden': chromeHidden }"
           :status="repo.status"
+          :is-git="repo.currentIsGit"
           :syncing="syncing"
           :edit-mode="editMode"
           :auto-save="settings.autoSave"
@@ -353,7 +399,10 @@ import TopBar from '@/components/TopBar.vue'
 import TocPanel from '@/components/TocPanel.vue'
 import MarkdownView from '@/components/MarkdownView.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import EbookView from '@/components/EbookView.vue'
+import PdfView from '@/components/PdfView.vue'
 import Palette from '@/components/Palette.vue'
+import { dropRecent, listRecent, pushRecent, recentMeta, type RecentDoc } from '@/core/recent'
 import EditorView from '@/components/EditorView.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import SyncIssueDialog from '@/components/SyncIssueDialog.vue'
@@ -394,6 +443,14 @@ const canForward = ref(false)
 const toc = ref<TocItem[]>([])
 const activeSlug = ref('')
 const mdView = ref<InstanceType<typeof MarkdownView> | null>(null)
+const ebookView = ref<InstanceType<typeof EbookView> | null>(null)
+const pdfView = ref<InstanceType<typeof PdfView> | null>(null)
+/** epub / mobi 走电子书视图:它按章渲染,与 markdown 那套整篇渲染的机制不通用 */
+const isEbook = computed(() => fileKind(currentPath.value) === 'ebook')
+/** pdf 是固定版式,连排版旋钮都不适用,同样独立成视图 */
+const isPdf = computed(() => fileKind(currentPath.value) === 'pdf')
+/** 当前章名 / 书名 / PDF 标题,给标题栏用 */
+const bookTitle = ref('')
 const editorRef = ref<InstanceType<typeof EditorView> | null>(null)
 const editMode = ref(false)
 const editorDirty = ref(false)
@@ -661,39 +718,75 @@ async function doDelete(node: TreeNode): Promise<void> {
   }
 }
 
-async function doExport(type: 'html' | 'print'): Promise<void> {
+async function doExport(type: 'html' | 'print' | 'image'): Promise<void> {
   if (type === 'print') {
     window.print()
     return
   }
-  const prose = document.querySelector<HTMLElement>('.prose')
+  // 自带样式的 HTML 文档渲染在 .ink-html 里(不套 .prose),导出也要认它
+  const prose = document.querySelector<HTMLElement>('.prose, .ink-html')
   if (!prose) {
     toast('没有可导出的内容', true)
     return
   }
+  const name = currentPath.value.split('/').pop()?.replace(/\.(md|markdown|html?)$/i, '') || 'export'
   try {
+    if (type === 'image') {
+      await exportImages(prose, name)
+      return
+    }
     toast('正在生成 HTML…')
-    const name = currentPath.value.split('/').pop()?.replace(/\.(md|markdown)$/i, '') || 'export'
     const { buildExportHtml } = await import('@/core/export')
     const htmlText = await buildExportHtml(name, prose)
-    if (isTauri) {
-      const { save } = await import('@tauri-apps/plugin-dialog')
-      const dest = await save({ defaultPath: `${name}.html`, filters: [{ name: 'HTML', extensions: ['html'] }] })
-      if (!dest) return
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('export_file', { path: dest, content: htmlText })
-    } else {
-      const blob = new Blob([htmlText], { type: 'text/html' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `${name}.html`
-      a.click()
-      URL.revokeObjectURL(a.href)
-    }
+    const dest = await pickSavePath(`${name}.html`, 'HTML', ['html'])
+    if (!dest) return
+    await backend.exportFile(dest, htmlText)
     toast('已导出 HTML')
   } catch (e) {
     toast(`导出失败:${errMsg(e)}`, true)
   }
+}
+
+/**
+ * 保存位置。桌面走系统保存对话框;开发模式(浏览器)没有对话框,
+ * 直接把文件名当"路径"返回,由 devBackend 转成下载。
+ */
+async function pickSavePath(fileName: string, label: string, exts: string[]): Promise<string | null> {
+  if (!isTauri) return fileName
+  const { save } = await import('@tauri-apps/plugin-dialog')
+  return (await save({ defaultPath: fileName, filters: [{ name: label, extensions: exts }] })) ?? null
+}
+
+/**
+ * 导出 PNG 长图。超长的正文会被切成多张(canvas 有尺寸上限),
+ * 所以先问一次保存位置,再按 `名字-1.png`、`名字-2.png` 顺序写出去。
+ */
+async function exportImages(prose: HTMLElement, name: string): Promise<void> {
+  toast('正在生成图片…')
+  const { exportProseImages } = await import('@/core/export')
+  const blobs = await exportProseImages(prose, (done, total) => {
+    // 单张就不啰嗦了;分段时报进度,否则几十秒里界面像卡住
+    if (total <= 1) return
+    toast(done === 0 ? `内容较长,将分成 ${total} 张…` : `已生成 ${done} / ${total} 张…`)
+  })
+  if (blobs.length === 0) {
+    toast('没有生成任何图片', true)
+    return
+  }
+  const dest = await pickSavePath(`${name}.png`, 'PNG 图片', ['png'])
+  if (!dest) return
+  const base = dest.replace(/\.png$/i, '')
+  for (let i = 0; i < blobs.length; i++) {
+    const buf = new Uint8Array(await blobs[i]!.arrayBuffer())
+    let bin = ''
+    // 分块转 base64:一次 apply 几 MB 的数组会爆调用栈
+    for (let at = 0; at < buf.length; at += 0x8000) {
+      bin += String.fromCharCode(...buf.subarray(at, at + 0x8000))
+    }
+    const path = blobs.length === 1 ? `${base}.png` : `${base}-${i + 1}.png`
+    await backend.exportBinary(path, btoa(bin))
+  }
+  toast(blobs.length === 1 ? '已导出图片' : `已导出 ${blobs.length} 张图片(长图已分段)`)
 }
 
 function onOpenChange(path: string): void {
@@ -707,43 +800,89 @@ function onOpenChange(path: string): void {
 
 const currentPath = computed(() => String(route.query.f ?? ''))
 
-// 记录每个仓库最后阅读的文档(冷启动恢复)与最近阅读列表(Ctrl+P 空输入展示)
-watch(currentPath, (p) => {
-  if (p && repo.currentRepoId) {
-    localStorage.setItem(`inkread:lastdoc:${repo.currentRepoId}`, p)
-    const key = `inkread:recent:${repo.currentRepoId}`
-    try {
-      const arr = JSON.parse(localStorage.getItem(key) ?? '[]') as string[]
-      localStorage.setItem(key, JSON.stringify([p, ...arr.filter((x) => x !== p)].slice(0, 20)))
-    } catch {
-      localStorage.setItem(key, JSON.stringify([p]))
-    }
-  }
-})
+// 记录每个仓库最后阅读的文档(冷启动恢复)与最近阅读列表(侧栏分组 + Ctrl+P 空输入)
+const recentDocs = ref<RecentDoc[]>([])
+/** 命令面板只要路径 */
+const recentFiles = computed(() => recentDocs.value.map((d) => d.path))
+// 默认收起:最近阅读一多就把文件树顶下去,想切文档反而要先滚一大段(2026-09-02 用户反馈)
+const recentOpen = ref(localStorage.getItem('inkread:recentopen') === '1')
+watch(recentOpen, (v) => localStorage.setItem('inkread:recentopen', v ? '1' : '0'))
 
-const recentFiles = ref<string[]>([])
+/** 侧栏只露前几条,剩下的去命令面板看 —— 别把文件树挤没了 */
+const SIDE_RECENT = 6
+const recentShown = computed(() => recentDocs.value.slice(0, SIDE_RECENT))
 
+/**
+ * 读最近阅读,顺手把已经不存在的文档摘掉(删了/改名了的不该继续挂在列表里)。
+ * 文件树还没加载完时不做清理,否则会把整张列表误判成"全都不存在"。
+ */
 function loadRecent(): void {
-  try {
-    recentFiles.value = (JSON.parse(localStorage.getItem(`inkread:recent:${repo.currentRepoId}`) ?? '[]') as string[]).filter(
-      (p) => repo.exists(p),
-    )
-  } catch {
-    recentFiles.value = []
+  const all = listRecent(repo.currentRepoId)
+  if (repo.tree.length === 0) {
+    recentDocs.value = all
+    return
   }
+  const gone = all.filter((d) => !repo.exists(d.path)).map((d) => d.path)
+  if (gone.length > 0) dropRecent(repo.currentRepoId, gone)
+  recentDocs.value = all.filter((d) => !gone.includes(d.path))
 }
 
+function recentLabel(doc: RecentDoc): string {
+  return recentMeta(repo.currentRepoId, doc)
+}
+
+// 切换文库、文件树刷新之后都要重取(列表按文库分开存,清理也依赖文件树)
+watch(() => [repo.currentRepoId, repo.tree] as const, loadRecent)
+
+/**
+ * 记一次「读过」。放在 recentDocs 等状态声明之后 —— 它带 immediate,
+ * setup 期间就会跑一次(冷启动直接落在某篇文档上时,这个 watch 本来不触发,
+ * 那篇就永远进不了最近阅读),跑得比状态声明早会直接 TDZ 报错、整页白屏。
+ */
+watch(
+  currentPath,
+  (p) => {
+    if (p && repo.currentRepoId) {
+      localStorage.setItem(`inkread:lastdoc:${repo.currentRepoId}`, p)
+      pushRecent(repo.currentRepoId, p)
+      loadRecent()
+    }
+  },
+  { immediate: true },
+)
+
 /** 无指定文档时的默认打开:上次阅读 → INDEX.md → 欢迎页 */
-function openDefaultDoc(): void {
+function openDefaultDoc(): boolean {
   const last = localStorage.getItem(`inkread:lastdoc:${repo.currentRepoId}`)
   if (last && repo.exists(last)) {
     openFile(last)
   } else if (repo.exists('INDEX.md')) {
     openFile('INDEX.md')
+  } else {
+    return false
   }
+  return true
+}
+
+/**
+ * 冷启动抢跑:文件树还没扫完就先把上次那篇发出去读。
+ *
+ * `openDefaultDoc()` 要用 `repo.exists()` 校验,而那依赖整棵文件树 —— 于是"读一篇文档"
+ * 被排在"递归 stat 整个文库"后面,Android 上尤其难受。这里跳过校验直接开读:
+ * 两个 IPC 并行,读文件通常几毫秒就回来了。代价是万一那篇已经不在了会先闪一下错误,
+ * 所以 `init()` 回来后要复核一次(见 onMounted)。
+ */
+function eagerOpenLastDoc(): string {
+  if (currentPath.value || !repo.currentRepoId) return ''
+  const last = localStorage.getItem(`inkread:lastdoc:${repo.currentRepoId}`)
+  if (!last) return ''
+  openFile(last)
+  return last
 }
 // 手机端纯阅读:Android 上不提供编辑入口
 const canEdit = computed(() => fileKind(currentPath.value) === 'markdown' && !isAndroid)
+/** 源码视图与导出:html 文档也适用(它同样渲染进 .prose) */
+const canSource = computed(() => ['markdown', 'html'].includes(fileKind(currentPath.value)))
 
 function setEdit(on: boolean): void {
   if (on) {
@@ -786,7 +925,7 @@ async function doSync(): Promise<void> {
 async function pickLocalRepo(): Promise<void> {
   try {
     const { open } = await import('@tauri-apps/plugin-dialog')
-    const dir = await open({ directory: true, title: '选择本地 git 仓库目录' })
+    const dir = await open({ directory: true, title: '选择文库目录(git 仓库或普通文件夹均可)' })
     if (typeof dir !== 'string' || !dir) return
     const added = await backend.addRepoLocal(dir)
     await repo.init()
@@ -1052,9 +1191,11 @@ function onRendered(): void {
   }
 }
 
-/** 大纲点击:阅读视图滚正文,编辑视图滚编辑区(两边各自实现 scrollToSlug) */
+/** 大纲点击:阅读视图滚正文,编辑视图滚编辑区,epub 换章(三边各自实现 scrollToSlug) */
 function onTocJump(slug: string): void {
-  if (editMode.value) editorRef.value?.scrollToSlug(slug)
+  if (isPdf.value) pdfView.value?.scrollToSlug(slug)
+  else if (isEbook.value) ebookView.value?.scrollToSlug(slug)
+  else if (editMode.value) editorRef.value?.scrollToSlug(slug)
   else mdView.value?.scrollToSlug(slug)
 }
 
@@ -1205,16 +1346,23 @@ onMounted(async () => {
       else permPageOpen.value = true
     })
   }
+  const eager = eagerOpenLastDoc()
   await repo.init()
   if (!currentPath.value) {
     openDefaultDoc()
+  } else if (eager && eager === currentPath.value && !repo.exists(eager)) {
+    // 抢跑那篇其实已经不在了(被删/改名/换了文库):清掉记录再退回默认文档,
+    // 否则会一直停在"文档读取失败"
+    localStorage.removeItem(`inkread:lastdoc:${repo.currentRepoId}`)
+    if (!openDefaultDoc()) void router.replace({ query: {} })
   }
   if (isTauri) {
     void setupTauriFileOpen()
   }
   // 启动自动拉取:不 await —— 墨阅首先是个离线阅读器,联网同步不该挡在阅读前面。
-  // 离线时直接跳过(libgit2 没有连接超时可设,断网发起 fetch 会干等到系统级超时)
-  if (settings.autoPull && repo.currentRepoId) {
+  // 离线时直接跳过(libgit2 没有连接超时可设,断网发起 fetch 会干等到系统级超时);
+  // 普通文件夹文库没有远端,也跳过
+  if (settings.autoPull && repo.currentRepoId && repo.currentIsGit) {
     if (navigator.onLine === false) {
       console.info('[inkread] 当前离线,跳过启动自动拉取')
     } else {

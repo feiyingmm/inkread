@@ -23,10 +23,17 @@ export function extOf(path: string): string {
 export const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'])
 export const TEXT_EXTS = new Set(['txt', 'sql', 'html', 'htm', 'json', 'yml', 'yaml', 'xml', 'csv', 'js', 'ts', 'css', 'sh', 'py', 'java', 'properties', 'conf', 'ini', 'log'])
 
-export function fileKind(path: string): 'markdown' | 'image' | 'text' | 'other' {
+/** 可重排的电子书:一章一屏地读,套用墨阅自己的排版 */
+export const EBOOK_EXTS = new Set(['epub', 'mobi', 'prc', 'azw', 'azw3'])
+
+export function fileKind(path: string): 'markdown' | 'image' | 'text' | 'ebook' | 'pdf' | 'html' | 'other' {
   const ext = extOf(path)
   if (ext === 'md' || ext === 'markdown') return 'markdown'
   if (IMAGE_EXTS.has(ext)) return 'image'
+  if (EBOOK_EXTS.has(ext)) return 'ebook'
+  if (ext === 'pdf') return 'pdf'
+  // html 单独一档:渲染着读(消毒后进 .prose),而不是当源码看
+  if (ext === 'html' || ext === 'htm') return 'html'
   if (TEXT_EXTS.has(ext)) return 'text'
   return 'other'
 }

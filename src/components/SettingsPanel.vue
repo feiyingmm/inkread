@@ -196,10 +196,10 @@
                   </span>
                   <span class="fo-desc">{{ m.desc }}</span>
                 </div>
-                <button v-if="progress[m.id] === undefined" class="fo-act fo-act--dl" title="下载" @click="download(m)">
+                <button v-if="fontProgress[m.id] === undefined" class="fo-act fo-act--dl" title="下载" @click="download(m)">
                   <Icon name="download" :size="15" />
                 </button>
-                <span v-else class="fo-pct">{{ progress[m.id] }}%</span>
+                <span v-else class="fo-pct">{{ fontProgress[m.id] }}%</span>
               </div>
             </template>
 
@@ -367,12 +367,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { errMsg } from '@/core/errmsg'
 import { TYPO_BOOK, TYPO_DEFAULT, useSettings, type Brand } from '@/stores/settings'
 import { backend, isTauri } from '@/core/backend'
 import type { FontMeta, InstalledFont } from '@/core/backend'
 import { detectSystemFonts, guessSystemFont, hasFont, registerFontFaces, type DetectedFont } from '@/core/fonts'
+import { fontProgress, installFont } from '@/core/font-tasks'
 import { toast } from '@/core/toast'
 import Icon from '@/components/Icon.vue'
 import MobilePage from '@/components/MobilePage.vue'
@@ -422,9 +423,6 @@ const fontsErr = ref('')
 const fontsLoading = ref(false)
 const showSystem = ref(false)
 const customFont = ref('')
-/** id → 已下载百分比;键存在即表示正在下载 */
-const progress = reactive<Record<string, number>>({})
-let unlistenProgress: (() => void) | null = null
 
 const installedBytes = computed(() => installed.value.reduce((n, f) => n + f.size, 0))
 /** 清单里去掉已经装上的 */
@@ -471,28 +469,23 @@ async function loadFonts(): Promise<void> {
   } finally {
     fontsLoading.value = false
   }
-  unlistenProgress = await backend.onFontProgress((p) => {
-    if (progress[p.id] === undefined) return
-    progress[p.id] = p.total > 0 ? Math.min(99, Math.floor((p.received / p.total) * 100)) : 0
-  })
 }
 
 watch(tab, (t) => {
   if (t === 'reading') void loadFonts()
 })
 
+/**
+ * 下载交给 core/font-tasks 的全局任务表:进度和 @font-face 重登记都不依赖本面板活着 ——
+ * 下载中关掉设置页,再进来还能看见进度条,也不会误开第二个下载线程。
+ */
 async function download(m: FontMeta): Promise<void> {
-  progress[m.id] = 0
+  await installFont(m)
+  // 面板还开着就把「已下载」那一栏刷出来(关掉了也无所谓,下次进来 loadFonts 会重读)
   try {
-    await backend.fontInstall(m)
     installed.value = await backend.fontInstalled()
-    // 装完立刻重登记 @font-face,不用重启就能选
-    registerFontFaces(installed.value, backend.fontUrl)
-    toast(`已安装 ${m.name}`)
-  } catch (e) {
-    toast(errMsg(e), true)
-  } finally {
-    delete progress[m.id]
+  } catch {
+    /* 读不到就等下次进面板再刷 */
   }
 }
 
@@ -606,7 +599,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisible)
-  unlistenProgress?.()
 })
 
 const version = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
