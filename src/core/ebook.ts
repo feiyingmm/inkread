@@ -38,6 +38,14 @@ export interface Ebook {
   chapters: EbookChapter[]
   toc: EbookTocItem[]
   renderChapter(id: string): EbookRender
+  /**
+   * 某章的纯文本,只给全书查找用。
+   *
+   * 不走 `renderChapter` 是因为那要建 DOM、改写图片链接、跑消毒 —— 一本 2469 章的书
+   * 全渲一遍要十几秒。这里只解压 + 粗暴剥标签,单章不到 1ms。
+   * 代价是标签属性里的字也会被搜到(偶有误报),对"这个词出现在哪章"够用了。
+   */
+  chapterText(id: string): string
   /** 释放当前章的图片 blob(换章时调) */
   releaseAssets(): void
   /** 关书 */

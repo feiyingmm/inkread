@@ -269,6 +269,13 @@ export async function openEpub(bytes: Uint8Array): Promise<Ebook> {
         }),
       })
     },
+    chapterText(id: string): string {
+      const data = file(id)
+      if (!data) return ''
+      return decodeText(data)
+        .replace(/<(script|style)[\s\S]*?<\/>/gi, ' ')
+        .replace(/<[^>]*>/g, ' ')
+    },
     releaseAssets(): void {
       for (const u of urls.values()) URL.revokeObjectURL(u)
       urls.clear()

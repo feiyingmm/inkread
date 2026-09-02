@@ -468,6 +468,11 @@ export async function openMobi(data: Uint8Array): Promise<Ebook> {
         },
       })
     },
+    chapterText(id: string): string {
+      const range = rangeById.get(id)
+      if (!range) return ''
+      return decodeText(slice(range.start, range.end), fallbackEnc).replace(/<[^>]*>/g, ' ')
+    },
     releaseAssets(): void {
       for (const u of urls.values()) URL.revokeObjectURL(u)
       urls.clear()

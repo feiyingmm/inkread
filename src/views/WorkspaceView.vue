@@ -1191,6 +1191,16 @@ function onRendered(): void {
   }
 }
 
+/**
+ * 文内查找(Ctrl+F)。三种阅读视图的机制不同,各自实现:
+ * markdown/HTML 在当前 DOM 里找,电子书要跨章,PDF 要逐页取文本。
+ */
+function openFindInView(): void {
+  if (isPdf.value) pdfView.value?.openFind()
+  else if (isEbook.value) ebookView.value?.openFind()
+  else mdView.value?.openFind()
+}
+
 /** 大纲点击:阅读视图滚正文,编辑视图滚编辑区,epub 换章(三边各自实现 scrollToSlug) */
 function onTocJump(slug: string): void {
   if (isPdf.value) pdfView.value?.scrollToSlug(slug)
@@ -1225,10 +1235,13 @@ function onKeydown(e: KeyboardEvent): void {
     e.preventDefault()
     openPalette('search')
   } else if (e.ctrlKey && !e.shiftKey && !e.altKey && (key === 'f' || key === 'h')) {
-    // 编辑视图内的查找 / 替换(阅读视图仍用 Ctrl+Shift+F 跨文档搜索)
+    // 编辑视图查找 / 替换;阅读视图是文内查找(跨文档搜索仍是 Ctrl+Shift+F)
     if (editMode.value) {
       e.preventDefault()
       editorRef.value?.openFind(key === 'h')
+    } else if (key === 'f' && currentPath.value) {
+      e.preventDefault()
+      openFindInView()
     }
   } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '/') {
     e.preventDefault()

@@ -2,6 +2,19 @@
   <div ref="scroller" class="content pdf-view">
     <div class="read-progress"><div class="read-progress__bar" :style="{ width: progress + '%' }"></div></div>
 
+    <FindBar
+      v-if="findOpen"
+      :key="findKey"
+      :total="hitPages.length"
+      :index="hitAt"
+      :busy="findBusy"
+      :initial="findInitial"
+      placeholder="在本 PDF 中查找…"
+      @search="runFind"
+      @step="stepFind"
+      @close="closeFind"
+    />
+
     <div v-if="errorMsg" class="prose-wrap"><div class="doc-error">{{ errorMsg }}</div></div>
     <div v-else-if="loading" class="prose-wrap"><div class="doc-error">正在打开《{{ fileName }}》…</div></div>
 
@@ -11,9 +24,11 @@
         :key="p.num"
         class="pdf-page"
         :data-page="p.num"
-        :style="{ width: p.w + 'px', height: p.h + 'px' }"
+        :style="{ width: p.w + 'px', height: p.h + 'px', '--total-scale-factor': String(scale) }"
       >
         <canvas :ref="(el) => setCanvas(p.num, el as HTMLCanvasElement | null)" />
+        <!-- 文本层:透明的字摆在位图上,才能选中、复制、查找 -->
+        <div class="textLayer" :ref="(el) => setTextLayer(p.num, el as HTMLElement | null)"></div>
         <span v-if="!p.painted" class="pdf-page-num">{{ p.num }}</span>
       </div>
     </div>
@@ -49,6 +64,8 @@ import { loadPdfjs, parsePdfTocSlug, pdfTocSlug, readOutline } from '@/core/pdf'
 import { loadPos, savePos } from '@/core/reading-pos'
 import type { TocItem } from '@/core/markdown/pipeline'
 import Icon from '@/components/Icon.vue'
+import FindBar from '@/components/FindBar.vue'
+import { clearHighlights, findRanges, paintHighlights, revealRange, stepIndex } from '@/core/find-in-dom'
 
 const props = defineProps<{
   repoId: string
@@ -85,12 +102,27 @@ const current = ref(1)
 
 const doc = shallowRef<PDFDocumentProxy | null>(null)
 const canvases = new Map<number, HTMLCanvasElement>()
+const textHosts = new Map<number, HTMLElement>()
 const tasks = new Map<number, RenderTask>()
+/** 已渲染的文本层,换页/缩放时要 cancel 掉,否则它会往已经清空的容器里继续塞 span */
+const textLayers = new Map<number, { cancel: () => void }>()
 /** 页原始尺寸(scale=1),缩放时据此重算占位 */
 const baseSizes = new Map<number, { w: number; h: number }>()
 let observer: IntersectionObserver | null = null
 let loadSeq = 0
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+// ---- 查找 ----
+const findOpen = ref(false)
+const findInitial = ref('')
+const findKey = ref(0)
+const findBusy = ref(false)
+/** 命中的页号(1 起);PDF 没有"当前窗口"的概念,结果一律按页聚合 */
+const hitPages = ref<number[]>([])
+const hitAt = ref(0)
+/** 每页的纯文本,取一次就缓存 —— 206 页逐页问 worker 要一两秒,不该每次搜都重来 */
+const pageTexts = new Map<number, string>()
+let findQuery = ''
 
 const total = computed(() => pages.value.length)
 const fileName = computed(() => props.path.split('/').pop() ?? '')
@@ -100,17 +132,28 @@ function setCanvas(num: number, el: HTMLCanvasElement | null): void {
   else canvases.delete(num)
 }
 
+function setTextLayer(num: number, el: HTMLElement | null): void {
+  if (el) textHosts.set(num, el)
+  else textHosts.delete(num)
+}
+
 function close(): void {
   observer?.disconnect()
   observer = null
   for (const t of tasks.values()) t.cancel()
   tasks.clear()
+  for (const t of textLayers.values()) t.cancel()
+  textLayers.clear()
+  for (const host of textHosts.values()) host.replaceChildren()
+  textHosts.clear()
   for (const c of canvases.values()) {
     c.width = 0
     c.height = 0
   }
   canvases.clear()
   baseSizes.clear()
+  pageTexts.clear()
+  hitPages.value = []
   // pdf.js v6 的文档代理没有 destroy(),要经 loadingTask 关(它会连 worker 一起收)
   void doc.value?.loadingTask.destroy()
   doc.value = null
@@ -223,6 +266,23 @@ async function paint(num: number): Promise<void> {
     tasks.set(num, task)
     await task.promise
     box.painted = true
+
+    // 文本层用 **CSS 比例**的 viewport(它是 DOM 不是位图,不该乘 dpr),
+    // 否则字的位置会按 dpr 整体放大、和画面错开
+    const host = textHosts.get(num)
+    if (host && doc.value) {
+      const pdfjs = await loadPdfjs()
+      textLayers.get(num)?.cancel()
+      host.replaceChildren()
+      pdfjs.setLayerDimensions(host as HTMLDivElement, page.getViewport({ scale: scale.value }))
+      const layer = new pdfjs.TextLayer({
+        textContentSource: page.streamTextContent(),
+        container: host,
+        viewport: page.getViewport({ scale: scale.value }),
+      })
+      textLayers.set(num, layer)
+      await layer.render()
+    }
   } catch {
     /* 取消或渲染失败:留占位,下次进入视野再试 */
   } finally {
@@ -233,6 +293,9 @@ async function paint(num: number): Promise<void> {
 function release(num: number): void {
   tasks.get(num)?.cancel()
   tasks.delete(num)
+  textLayers.get(num)?.cancel()
+  textLayers.delete(num)
+  textHosts.get(num)?.replaceChildren()
   const canvas = canvases.get(num)
   if (canvas) {
     // 宽高归零才真正释放位图内存,单纯 clearRect 不会
@@ -258,6 +321,9 @@ function applyScale(next: number): void {
   }
   for (const t of tasks.values()) t.cancel()
   tasks.clear()
+  for (const t of textLayers.values()) t.cancel()
+  textLayers.clear()
+  for (const host of textHosts.values()) host.replaceChildren()
   void nextTick(() => {
     // 缩放后 scrollTop 全乱了,按缩放前那一页重新定位
     goToPage(anchor)
@@ -341,8 +407,163 @@ onBeforeUnmount(() => {
   close()
 })
 
-defineExpose({ scrollToSlug })
+// ---- 查找 ----
+
+function openFind(initial = ''): void {
+  findInitial.value = initial
+  findKey.value++
+  findOpen.value = true
+}
+
+function closeFind(): void {
+  findOpen.value = false
+  hitPages.value = []
+  findQuery = ''
+  clearHighlights()
+}
+
+/** 某页的纯文本(带缓存) */
+async function textOf(num: number): Promise<string> {
+  const cached = pageTexts.get(num)
+  if (cached !== undefined) return cached
+  const d = doc.value
+  if (!d) return ''
+  try {
+    const page = await d.getPage(num)
+    const content = await page.getTextContent()
+    const text = content.items
+      .map((it) => ('str' in it ? it.str : ''))
+      .join('')
+      .toLowerCase()
+    pageTexts.set(num, text)
+    return text
+  } catch {
+    pageTexts.set(num, '')
+    return ''
+  }
+}
+
+/**
+ * 逐页找,结果按页聚合。
+ *
+ * 不做"第几处"的精确编号:`getTextContent` 给的字符偏移与文本层 DOM 里的
+ * 节点切分并不一一对应,硬映射容易错位。跳到页上之后在该页的文本层里重新找一遍,
+ * 位置自然就准了(见 `highlightOnPage`)。
+ */
+async function runFind(query: string): Promise<void> {
+  findQuery = query
+  clearHighlights()
+  hitPages.value = []
+  const needle = query.trim().toLowerCase()
+  if (!needle || !doc.value) return
+  findBusy.value = true
+  const hits: number[] = []
+  try {
+    const count = doc.value.numPages
+    for (let n = 1; n <= count; n++) {
+      if ((await textOf(n)).includes(needle)) hits.push(n)
+      // 每 20 页让出主线程,搜索期间界面不僵
+      if (n % 20 === 0) await new Promise((r) => setTimeout(r, 0))
+      if (!findOpen.value || findQuery.trim().toLowerCase() !== needle) return
+    }
+    hitPages.value = hits
+    hitAt.value = 0
+    if (hits.length > 0) await gotoHit(0)
+  } finally {
+    findBusy.value = false
+  }
+}
+
+/** 等某页的文本层渲染出来(它由 IntersectionObserver 异步触发) */
+async function waitTextLayer(num: number, tries = 40): Promise<HTMLElement | null> {
+  for (let i = 0; i < tries; i++) {
+    const host = textHosts.get(num)
+    if (host && host.children.length > 0) return host
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  return textHosts.get(num) ?? null
+}
+
+async function gotoHit(n: number): Promise<void> {
+  const num = hitPages.value[n]
+  if (!num) return
+  hitAt.value = n
+  goToPage(num)
+  const host = await waitTextLayer(num)
+  if (!host) return
+  const ranges = findRanges(host, findQuery)
+  if (ranges.length === 0) return
+  paintHighlights(ranges, 0)
+  revealRange(ranges[0])
+}
+
+function stepFind(dir: number): void {
+  if (hitPages.value.length === 0) return
+  void gotoHit(stepIndex(hitPages.value.length, hitAt.value, dir))
+}
+
+defineExpose({ scrollToSlug, openFind })
 </script>
+
+<!--
+  文本层的 span 由 pdf.js 在运行时创建,拿不到 scoped 的属性标记,所以这块样式
+  必须非 scoped(靠 .pdf-page 前缀限定范围)。规则抄自 pdfjs-dist/web/pdf_viewer.css
+  的 .textLayer 部分,只保留定位与字号所必需的那些,并展平了它的 CSS 嵌套写法。
+-->
+<style>
+/* pdf.js 用 round(down, …, --scale-round-x) 做像素对齐,变量缺了整条 width 就失效 */
+.pdf-page {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+.pdf-page .textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+/* 字本身透明:看到的是下面 canvas 画出来的字,选中时才现出选区 */
+.pdf-page .textLayer span,
+.pdf-page .textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+}
+.pdf-page .textLayer > :not(.markedContent),
+.pdf-page .textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.pdf-page .textLayer .markedContent {
+  display: contents;
+}
+.pdf-page .textLayer span[role='img'] {
+  user-select: none;
+  cursor: default;
+}
+.pdf-page .textLayer ::selection {
+  background: var(--accent-soft);
+}
+</style>
 
 <style scoped>
 .pdf-view {

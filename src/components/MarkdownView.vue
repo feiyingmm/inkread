@@ -2,12 +2,16 @@
   <div ref="scroller" class="content" @click="onClick">
     <div class="read-progress"><div class="read-progress__bar" :style="{ width: progress + '%' }"></div></div>
 
-    <div v-if="searchNav" class="search-nav">
-      <span class="sn-count">{{ searchNav.idx + 1 }}/{{ searchNav.total }}</span>
-      <button class="sn-btn" title="上一处" @click="stepHit(-1)"><Icon name="chevron-up" :size="16" /></button>
-      <button class="sn-btn" title="下一处" @click="stepHit(1)"><Icon name="chevron-down" :size="16" /></button>
-      <button class="sn-btn" title="清除高亮" @click="clearSearch()"><Icon name="close" :size="15" /></button>
-    </div>
+    <FindBar
+      v-if="findOpen"
+      :key="findKey"
+      :total="searchNav?.total ?? 0"
+      :index="searchNav?.idx ?? 0"
+      :initial="findInitial"
+      @search="runFind"
+      @step="stepHit"
+      @close="closeFind"
+    />
 
     <!-- 长表格的浮动表头:滚过表头后另画一份钉在内容区顶部(见 core/markdown/enhance.ts) -->
     <div ref="floatHeadEl" class="table-float-head" hidden></div>
@@ -51,6 +55,8 @@ import { loadPos, savePos, clearPos } from '@/core/reading-pos'
 import { useSettings } from '@/stores/settings'
 import { toast } from '@/core/toast'
 import Icon from '@/components/Icon.vue'
+import FindBar from '@/components/FindBar.vue'
+import { clearHighlights as clearHl, findRanges, paintHighlights, revealRange, stepIndex } from '@/core/find-in-dom'
 
 const props = defineProps<{
   repoId: string
@@ -89,13 +95,13 @@ const htmlStyled = ref(false)
 let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 let searchRanges: Range[] = []
 
+const findOpen = ref(false)
+const findInitial = ref('')
+/** 换文档时给 FindBar 换 key,好让它带着新的初始词重新挂载 */
+const findKey = ref(0)
+
 function clearHighlights(): void {
-  try {
-    CSS.highlights?.delete('inkread-search')
-    CSS.highlights?.delete('inkread-search-current')
-  } catch {
-    /* 不支持 Highlight API 时忽略 */
-  }
+  clearHl()
 }
 
 function clearSearch(): void {
@@ -375,52 +381,45 @@ function scrollToSlug(slug: string): void {
 }
 
 // ---------- 全文搜索命中导航 ----------
-function highlightText(rawQuery: string): void {
-  const root = proseEl.value
-  const query = rawQuery.trim().toLowerCase()
-  if (!root || !query) return
+/** 打开查找条(Ctrl+F / 从全库搜索跳转过来时) */
+function openFind(initial = ''): void {
+  findInitial.value = initial
+  findKey.value++
+  findOpen.value = true
+}
+
+function closeFind(): void {
+  findOpen.value = false
   clearSearch()
-  const ranges: Range[] = []
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  let node: Node | null
-  while ((node = walker.nextNode())) {
-    const text = (node.textContent ?? '').toLowerCase()
-    let idx = 0
-    while ((idx = text.indexOf(query, idx)) >= 0) {
-      const r = new Range()
-      r.setStart(node, idx)
-      r.setEnd(node, idx + query.length)
-      ranges.push(r)
-      idx += query.length
-    }
-  }
-  if (ranges.length === 0) return
-  searchRanges = ranges
-  applyHit(0)
+}
+
+/** 查找条输入驱动 */
+function runFind(query: string): void {
+  clearSearch()
+  if (!query.trim()) return
+  searchRanges = findRanges(proseEl.value, query)
+  if (searchRanges.length > 0) applyHit(0)
+}
+
+/**
+ * 从全库搜索结果跳过来时高亮命中词。顺手把查找条也打开 ——
+ * 读者接着往下翻找同一个词是很自然的下一步。
+ */
+function highlightText(rawQuery: string): void {
+  if (!rawQuery.trim()) return
+  openFind(rawQuery)
 }
 
 function applyHit(i: number): void {
   if (searchRanges.length === 0) return
   searchNav.value = { total: searchRanges.length, idx: i }
-  try {
-    if (CSS.highlights) {
-      CSS.highlights.set('inkread-search', new Highlight(...searchRanges))
-      CSS.highlights.set('inkread-search-current', new Highlight(searchRanges[i]))
-    }
-  } catch {
-    /* 不支持时仅滚动 */
-  }
-  const el = searchRanges[i].startContainer.parentElement
-  if (el) {
-    unfoldFor(el)
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
+  paintHighlights(searchRanges, i)
+  revealRange(searchRanges[i], unfoldFor)
 }
 
 function stepHit(dir: number): void {
   if (!searchNav.value || searchRanges.length === 0) return
-  const n = (searchNav.value.idx + dir + searchRanges.length) % searchRanges.length
-  applyHit(n)
+  applyHit(stepIndex(searchRanges.length, searchNav.value.idx, dir))
 }
 
 // ---------- json 代码块格式化 ----------
@@ -666,7 +665,7 @@ onBeforeUnmount(() => {
   clearHighlights()
 })
 
-defineExpose({ scrollToSlug, highlightText, reload: load, toggleSource })
+defineExpose({ scrollToSlug, highlightText, openFind, reload: load, toggleSource })
 </script>
 
 <style scoped>

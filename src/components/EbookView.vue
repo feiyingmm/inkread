@@ -2,6 +2,21 @@
   <div ref="scroller" class="content" @click="onClick">
     <div class="read-progress"><div class="read-progress__bar" :style="{ width: progress + '%' }"></div></div>
 
+    <FindBar
+      v-if="findOpen"
+      :key="findKey"
+      :total="findTotal"
+      :index="findIndex"
+      :busy="findBusy"
+      :initial="findInitial"
+      :whole-label="wholeMode ? `全书 ${bookHits.length} 章` : '全书'"
+      :whole-active="wholeMode"
+      @search="runFind"
+      @step="stepFind"
+      @whole="toggleWhole"
+      @close="closeFind"
+    />
+
     <div class="prose-wrap">
       <div v-if="errorMsg" class="doc-error">{{ errorMsg }}</div>
       <div v-else-if="loading" class="doc-error">正在打开《{{ fileName }}》…</div>
@@ -60,6 +75,8 @@ import type { TocItem } from '@/core/markdown/pipeline'
 import { useSettings } from '@/stores/settings'
 import { toast } from '@/core/toast'
 import Icon from '@/components/Icon.vue'
+import FindBar from '@/components/FindBar.vue'
+import { clearHighlights, findRanges, paintHighlights, revealRange, stepIndex } from '@/core/find-in-dom'
 
 const props = defineProps<{
   repoId: string
@@ -102,6 +119,28 @@ let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 let shifting = false
 /** 目录点进来要滚到的锚点 */
 let pendingAnchor = ''
+
+// ---- 文内 / 全书查找 ----
+const findOpen = ref(false)
+const findInitial = ref('')
+const findKey = ref(0)
+const findBusy = ref(false)
+/** true = 结果按"哪些章有命中"给,上下键在章之间跳;false = 只搜当前窗口里的几章 */
+const wholeMode = ref(false)
+/** 全书模式下有命中的章序号 */
+const bookHits = ref<number[]>([])
+const bookHitAt = ref(0)
+/**
+ * 当前窗口 DOM 里的命中。
+ * 必须是 ref:`findTotal` 这个 computed 依赖它的长度,放在普通变量里
+ * computed 永远追踪不到变化,查找条的计数会一直停在 0(显示"无结果")。
+ */
+const domRanges = shallowRef<Range[]>([])
+const domIndex = ref(0)
+let findQuery = ''
+
+const findTotal = computed(() => (wholeMode.value ? bookHits.value.length : domRanges.value.length))
+const findIndex = computed(() => (wholeMode.value ? bookHitAt.value : domIndex.value))
 
 const total = computed(() => book.value?.chapters.length ?? 0)
 const fileName = computed(() => props.path.split('/').pop() ?? '')
@@ -378,7 +417,115 @@ onBeforeUnmount(() => {
   closeBook()
 })
 
-defineExpose({ scrollToSlug })
+// ---- 查找 ----
+
+/** 打开查找条(Ctrl+F / 从全库搜索跳转过来) */
+function openFind(initial = ''): void {
+  findInitial.value = initial
+  findKey.value++
+  findOpen.value = true
+}
+
+function closeFind(): void {
+  findOpen.value = false
+  wholeMode.value = false
+  bookHits.value = []
+  domRanges.value = []
+  findQuery = ''
+  clearHighlights()
+}
+
+/** 在当前窗口(DOM 里那几章)找 */
+function findInDom(): void {
+  domRanges.value = findRanges(proseEl.value, findQuery)
+  domIndex.value = 0
+  if (domRanges.value.length > 0) {
+    paintHighlights(domRanges.value, 0)
+    revealRange(domRanges.value[0])
+  } else {
+    clearHighlights()
+  }
+}
+
+/**
+ * 全书查找:逐章取纯文本粗筛,只记"哪些章有",不记具体位置。
+ *
+ * 不精确到"第几处"是有意的 —— 粗筛拿的是原始 HTML 剥标签后的文本,它的字符偏移
+ * 和渲染出来的 DOM 并不对应,硬映射容易错位。跳到章里之后再在 DOM 里重新找一遍,
+ * 位置就准了。2469 章逐章解压约 5 秒,所以只在点「全书」时才跑,不跟着输入走。
+ */
+async function findWholeBook(): Promise<void> {
+  const b = book.value
+  if (!b || !findQuery.trim()) return
+  const needle = findQuery.trim().toLowerCase()
+  findBusy.value = true
+  bookHits.value = []
+  const hits: number[] = []
+  try {
+    for (let i = 0; i < b.chapters.length; i++) {
+      const chapter = b.chapters[i]
+      if (chapter && b.chapterText(chapter.id).toLowerCase().includes(needle)) hits.push(i)
+      // 每扫 200 章让出一次主线程,长书搜索期间界面不至于僵住
+      if (i % 200 === 199) await new Promise((r) => setTimeout(r, 0))
+      if (!findOpen.value || findQuery.trim().toLowerCase() !== needle) return
+    }
+    bookHits.value = hits
+    bookHitAt.value = 0
+    if (hits.length === 0) {
+      toast('全书都没找到这个词', true)
+      return
+    }
+    gotoBookHit(0)
+  } finally {
+    findBusy.value = false
+  }
+}
+
+/** 跳到全书命中的第 n 章,渲染完再在 DOM 里精确定位 */
+function gotoBookHit(n: number): void {
+  const chapterIdx = bookHits.value[n]
+  if (chapterIdx === undefined) return
+  bookHitAt.value = n
+  if (loaded.value.some((c) => c.index === chapterIdx)) {
+    findInDom()
+    return
+  }
+  resetTo(chapterIdx)
+  // resetTo 的 DOM 更新在 nextTick 里,等它落地再找
+  void nextTick(() => void nextTick(findInDom))
+}
+
+function runFind(query: string): void {
+  findQuery = query
+  clearHighlights()
+  domRanges.value = []
+  if (!query.trim()) {
+    bookHits.value = []
+    return
+  }
+  if (wholeMode.value) void findWholeBook()
+  else findInDom()
+}
+
+function stepFind(dir: number): void {
+  if (wholeMode.value) {
+    if (bookHits.value.length === 0) return
+    gotoBookHit(stepIndex(bookHits.value.length, bookHitAt.value, dir))
+    return
+  }
+  if (domRanges.value.length === 0) return
+  domIndex.value = stepIndex(domRanges.value.length, domIndex.value, dir)
+  paintHighlights(domRanges.value, domIndex.value)
+  revealRange(domRanges.value[domIndex.value])
+}
+
+function toggleWhole(): void {
+  wholeMode.value = !wholeMode.value
+  if (wholeMode.value) void findWholeBook()
+  else findInDom()
+}
+
+defineExpose({ scrollToSlug, openFind })
 </script>
 
 <style scoped>
