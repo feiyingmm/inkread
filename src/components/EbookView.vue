@@ -89,6 +89,8 @@ const emit = defineEmits<{
   rendered: []
   /** 书名/章名给标题栏用 */
   title: [text: string]
+  /** 点到正文空白(不是链接 / 章节条 / 回顶 / 查找条):手机端用它切换沉浸阅读 */
+  'tap-blank': []
 }>()
 
 const settings = useSettings()
@@ -383,8 +385,22 @@ function toTop(): void {
 
 /** 书内链接与外链都在这儿接管 —— 渲染时已经把 href 摘掉了,不会有原生跳转 */
 function onClick(e: MouseEvent): void {
-  const el = (e.target as HTMLElement | null)?.closest('a')
-  if (!el) return
+  const target = e.target as HTMLElement | null
+  const el = target?.closest('a')
+  if (!el) {
+    // 没点到链接也没点到章节条 / 回顶 / 查找条这些控件 = 点了正文空白:
+    // 手机端靠这一下切换沉浸阅读(顶栏 / 状态条隐现),与 MarkdownView 同一套约定。
+    // 此前电子书视图没发这个事件,导致"非 markdown 文档没有全屏阅读"(2026-09-02 用户反馈)。
+    // 划选文字松手也会来一次 click,有选区时不当空白点
+    if (
+      target &&
+      !target.closest('.chap-bar, .back-top, .find-bar, .lightbox') &&
+      !(window.getSelection()?.toString() ?? '')
+    ) {
+      emit('tap-blank')
+    }
+    return
+  }
   const inner = el.getAttribute(CHAPTER_ATTR)
   if (inner) {
     e.preventDefault()

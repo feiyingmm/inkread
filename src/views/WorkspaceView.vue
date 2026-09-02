@@ -160,6 +160,7 @@
           @toc="toc = $event"
           @rendered="onRendered"
           @title="bookTitle = $event"
+          @tap-blank="onTapBlank"
         />
         <EbookView
           v-else-if="isEbook"
@@ -170,6 +171,7 @@
           @active="activeSlug = $event"
           @rendered="onRendered"
           @title="bookTitle = $event"
+          @tap-blank="onTapBlank"
         />
         <MarkdownView
           v-else-if="!editMode"
@@ -246,6 +248,7 @@
     <LocalPathDialog v-if="localPathOpen" @close="localPathOpen = false" @done="onLocalPathDone" />
     <ChangesPanel
       v-if="changesOpen"
+      :repo-id="repo.currentRepoId"
       :changes="repo.status?.changes ?? []"
       :syncing="syncing"
       @close="changesOpen = false"
@@ -415,6 +418,7 @@ import MobilePage from '@/components/MobilePage.vue'
 import StoragePermPage from '@/components/StoragePermPage.vue'
 import Icon from '@/components/Icon.vue'
 import { backend, isTauri } from '@/core/backend'
+import { isMainWindow } from '@/core/window'
 import { copyText } from '@/core/clipboard'
 import { installAndroidBackHandler, popLayer, useBackLayerWhen } from '@/core/backstack'
 import { useEdgePeek } from '@/core/edge-peek'
@@ -928,12 +932,28 @@ async function pickLocalRepo(): Promise<void> {
     const dir = await open({ directory: true, title: '选择文库目录(git 仓库或普通文件夹均可)' })
     if (typeof dir !== 'string' || !dir) return
     const added = await backend.addRepoLocal(dir)
+    // 已在列表里(含双击 md 建过的临时文库)时后端原样返回那条,这里只管切过去并把话说清楚
+    const existed = repo.repos.some((r) => r.id === added.id)
     await repo.init()
     await switchRepo(added.id)
+    toast(existed ? `「${added.name}」已在文库列表中,已切换过去` : `已添加文库「${added.name}」`)
   } catch (e) {
     toast(errMsg(e), true)
   }
 }
+
+/**
+ * 桌面端:把「关闭按钮行为」同步给 Rust —— 点 ✕ 是退出还是隐藏到托盘由它在窗口事件里裁决,
+ * 托盘图标也随之出现 / 消失。设置存在前端,所以启动时先同步一次,之后切换即同步。
+ * 只由主窗口发:标志是进程级的,副窗口再发一遍没意义。
+ */
+function syncCloseBehavior(): void {
+  if (!isTauri || isAndroid || !isMainWindow) return
+  void import('@tauri-apps/api/core')
+    .then(({ invoke }) => invoke('set_close_behavior', { toTray: settings.closeToTray }))
+    .catch((e) => toast(`托盘设置未生效:${errMsg(e)}`, true))
+}
+watch(() => settings.closeToTray, syncCloseBehavior)
 
 const repoMenuOpen = ref(false)
 
@@ -1351,6 +1371,7 @@ onMounted(async () => {
   window.addEventListener('focus', onFocusRefresh)
   document.addEventListener('visibilitychange', onFocusRefresh)
   void installAndroidBackHandler()
+  syncCloseBehavior()
   // Android:文库是手机存储里的目录,没有「所有文件访问」连文件名都读不到,
   // 与其等用户添加文库时才撞墙,不如首次启动就把话说清楚(问过一次就不再自动弹)
   if (isTauri && isAndroid && shouldPromptOnLaunch()) {

@@ -67,6 +67,18 @@ export interface GitStatus {
   behind: number
 }
 
+/** 变更面板「查看改动」要对比的两侧文本;diff 本身由前端 core/diff.ts 计算 */
+export interface DiffSource {
+  /** 最近提交(HEAD)里的版本;文件不在最近提交里(新增 / 未跟踪)为 null */
+  base: string | null
+  /** 工作区当前内容;文件已删除为 null */
+  current: string | null
+  /** 任一侧像二进制(前 8000 字节含 NUL)或超过 4MB:两侧文本都不给,只给大小 */
+  binary: boolean
+  baseSize: number
+  currentSize: number
+}
+
 export interface GitOpResult {
   ok: boolean
   changed: boolean
@@ -170,6 +182,8 @@ export interface Backend {
   deleteEntry(repoId: string, path: string): Promise<void>
   /** 撤销单文件的本地修改(未跟踪文件=直接删除) */
   discardFile(repoId: string, path: string): Promise<void>
+  /** 单文件「最近提交 ↔ 工作区」两侧文本(变更面板查看改动用;行级 diff 在前端 core/diff.ts 算) */
+  gitDiffSource(repoId: string, path: string): Promise<DiffSource>
   /** 仓库内相对路径 → 磁盘绝对路径(复制路径 / 在文件管理器中显示) */
   absPath(repoId: string, path: string): Promise<string>
   /** 条目信息:大小 / 时间 / 行数字数 / 目录子项统计 */

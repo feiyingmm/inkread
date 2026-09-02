@@ -344,6 +344,60 @@ pub fn sync(
     }
 }
 
+/// 变更面板「查看改动」要对比的两侧文本
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffSource {
+    /// 最近提交(HEAD)里的版本;文件不在最近提交里(新增 / 未跟踪)为 None
+    pub base: Option<String>,
+    /// 工作区当前内容;文件已删除为 None
+    pub current: Option<String>,
+    /// 任一侧像二进制(前 8000 字节含 NUL,与 git 的判定一致)或超过 4MB:两侧文本都不给,只给大小
+    pub binary: bool,
+    pub base_size: u64,
+    pub current_size: u64,
+}
+
+/// 单文件「最近提交 ↔ 工作区」两侧的文本,交给前端算行级 diff。
+///
+/// 两端后端(Rust / Node)只负责取文本,diff 算法只在前端写一份 —— 各算一遍迟早长出两种输出。
+/// 对比基线是 HEAD 而不是暂存区:墨阅的"撤销修改"恢复的就是 HEAD 版本,两处口径一致。
+pub fn diff_source(path: &Path, rel: &str) -> Result<DiffSource, String> {
+    const MAX: usize = 4 * 1024 * 1024;
+    let repo = open(path)?;
+    let base_bytes: Option<Vec<u8>> = repo
+        .head()
+        .ok()
+        .and_then(|h| h.peel_to_tree().ok())
+        .and_then(|t| t.get_path(Path::new(rel)).ok())
+        .and_then(|e| e.to_object(&repo).ok())
+        .and_then(|o| o.into_blob().ok())
+        .map(|b| b.content().to_vec());
+    let abs = path.join(rel);
+    let current_bytes: Option<Vec<u8>> = if abs.is_file() {
+        Some(std::fs::read(&abs).map_err(|e| format!("读取失败: {e}"))?)
+    } else {
+        None
+    };
+    let base_size = base_bytes.as_ref().map(|b| b.len()).unwrap_or(0) as u64;
+    let current_size = current_bytes.as_ref().map(|b| b.len()).unwrap_or(0) as u64;
+    let looks_binary = |b: &Option<Vec<u8>>| {
+        b.as_ref()
+            .map(|v| v.len() > MAX || v.iter().take(8000).any(|&c| c == 0))
+            .unwrap_or(false)
+    };
+    if looks_binary(&base_bytes) || looks_binary(&current_bytes) {
+        return Ok(DiffSource { base: None, current: None, binary: true, base_size, current_size });
+    }
+    Ok(DiffSource {
+        base: base_bytes.map(|b| crate::fsops::decode_text(&b)),
+        current: current_bytes.map(|b| crate::fsops::decode_text(&b)),
+        binary: false,
+        base_size,
+        current_size,
+    })
+}
+
 /// 撤销单文件的本地修改:tracked 文件恢复 HEAD 版本(含已暂存改动);未跟踪文件直接删除
 pub fn discard_file(path: &Path, rel: &str) -> Result<(), String> {
     let repo = open(path)?;

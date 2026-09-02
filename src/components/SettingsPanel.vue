@@ -257,6 +257,28 @@
           </div>
         </template>
 
+        <!-- 窗口(桌面) -->
+        <template v-else-if="tab === 'window'">
+          <div class="set-item">
+            <div class="si-info">
+              <div class="si-title">点右上角关闭按钮时</div>
+              <div class="si-desc">
+                {{
+                  settings.closeToTray
+                    ? '主窗口收进系统托盘,墨阅留在后台;点托盘图标可再打开,托盘右键菜单里退出'
+                    : '直接退出墨阅(默认)。收进托盘时才会出现托盘图标'
+                }}
+              </div>
+            </div>
+            <div class="si-ctrl">
+              <div class="seg">
+                <button :class="{ 'is-on': !settings.closeToTray }" @click="settings.closeToTray = false">退出程序</button>
+                <button :class="{ 'is-on': settings.closeToTray }" @click="settings.closeToTray = true">收进托盘</button>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- Git 令牌 -->
         <template v-else-if="tab === 'token'">
           <template v-if="isTauri">
@@ -383,7 +405,7 @@ import { checkStorageAccess, isAndroid, requestStorageAccess } from '@/core/stor
 const emit = defineEmits<{ close: [] }>()
 const settings = useSettings()
 
-type TabKey = 'appearance' | 'reading' | 'sync' | 'token' | 'storage' | 'help' | 'about'
+type TabKey = 'appearance' | 'reading' | 'sync' | 'token' | 'storage' | 'window' | 'help' | 'about'
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'appearance', label: '外观', icon: 'palette' },
@@ -392,6 +414,8 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: 'token', label: 'Git 令牌', icon: 'key' },
   // 存储权限只在 Android 有意义(桌面没有分区存储这回事)
   ...(isAndroid ? [{ key: 'storage' as TabKey, label: '存储权限', icon: 'shield' }] : []),
+  // 窗口行为(关闭按钮 → 托盘)只有桌面打包版有;浏览器和手机都没有"关闭窗口"这回事
+  ...(isTauri && !isAndroid ? [{ key: 'window' as TabKey, label: '窗口', icon: 'display' }] : []),
   { key: 'help', label: '帮助', icon: 'help' },
   { key: 'about', label: '关于', icon: 'info' },
 ]

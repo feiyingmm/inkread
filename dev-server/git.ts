@@ -18,6 +18,20 @@ export function run(repoPath: string, args: string[]): Promise<{ code: number; s
   })
 }
 
+/** 同 run,但 stdout 按原始字节返回(取 HEAD 里的文件内容用:可能不是 UTF-8,也可能是二进制) */
+export function runRaw(repoPath: string, args: string[]): Promise<{ code: number; stdout: Buffer }> {
+  return new Promise((resolve) => {
+    execFile(
+      'git',
+      args,
+      { cwd: repoPath, windowsHide: true, maxBuffer: 64 * 1024 * 1024, encoding: 'buffer' },
+      (err, stdout) => {
+        resolve({ code: err ? 1 : 0, stdout: stdout ?? Buffer.alloc(0) })
+      },
+    )
+  })
+}
+
 export async function gitStatus(repoPath: string) {
   const branch = (await run(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim() || '(无分支)'
   const porcelain = await run(repoPath, ['status', '--porcelain', '-z'])

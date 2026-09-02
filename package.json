@@ -2,7 +2,7 @@
   "name": "inkread",
   "productName": "墨阅",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "墨阅 —— 让每一篇 Markdown 静静展开,如书页般被阅读。",
   "scripts": {

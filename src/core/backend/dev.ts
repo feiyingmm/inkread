@@ -1,5 +1,6 @@
 import type {
   Backend,
+  DiffSource,
   EntryInfo,
   FileContent,
   GitOpResult,
@@ -83,6 +84,7 @@ export const devBackend: Backend = {
   renameEntry: (repo, from, to) => post<void>(`/api/rename?repo=${enc(repo)}&path=${enc(from)}&to=${enc(to)}`),
   deleteEntry: (repo, path) => post<void>(`/api/delete?repo=${enc(repo)}&path=${enc(path)}`),
   discardFile: (repo, path) => post<void>(`/api/discard-file?repo=${enc(repo)}&path=${enc(path)}`),
+  gitDiffSource: (repo, path) => get<DiffSource>(`/api/diff-source?repo=${enc(repo)}&path=${enc(path)}`),
   absPath: (repo, path) => get<{ path: string }>(`/api/abs-path?repo=${enc(repo)}&path=${enc(path)}`).then((r) => r.path),
   entryInfo: (repo, path) => get<EntryInfo>(`/api/entry-info?repo=${enc(repo)}&path=${enc(path)}`),
   // 字体扩展要落盘到应用数据目录、并靠 Rust 注册的 inkfont 协议加载,浏览器里两样都没有。

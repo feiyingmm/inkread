@@ -2,6 +2,8 @@ mod fonts;
 mod fsops;
 mod gitops;
 mod state;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod tray;
 
 use percent_encoding::percent_decode_str;
 use serde::Serialize;
@@ -62,8 +64,19 @@ fn add_repo_local(app: AppHandle, state: State<'_, AppState>, path: String) -> R
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "repo".into());
     let mut repos = state.repos.lock().map_err(|e| e.to_string())?;
-    if repos.iter().any(|r| r.path == path) {
-        return Err("该仓库已添加".into());
+    // 同一目录已经在列表里:把那一条原样返回,让前端切过去 —— 而不是报"该仓库已添加"了事。
+    // 会撞到这里的有两种来源:用户重复添加;以及此前双击 md 文件时以所在目录建过**临时**文库
+    // (`open_path`,不落盘)。后者要顺手转正:用户这一刻明确说了"把这个目录当文库",
+    // 若仍按临时处理,repos.json 里没它,重启后文库就没了 —— 2026-09-02 用户反馈的
+    // "提示已添加却没切换、重启后再添加才成功"就是这条路。id 不变:最近阅读、滚动位置都按 id 存。
+    if let Some(idx) = repos.iter().position(|r| same_dir(&r.path, &path)) {
+        if repos[idx].ephemeral {
+            repos[idx].ephemeral = false;
+            repos[idx].name = name.clone();
+            state::save_repos(&app, &repos)?;
+        }
+        let r = &repos[idx];
+        return Ok(RepoMeta { id: r.id.clone(), name: r.name.clone(), git });
     }
     let mut id = name.clone();
     let mut n = 1;
@@ -77,8 +90,34 @@ fn add_repo_local(app: AppHandle, state: State<'_, AppState>, path: String) -> R
         path,
         ephemeral: false,
     });
-    state::save_repos(&app, &repos)?;
+    // 落盘失败就把内存里那条也撤回:否则内存说"已添加"、磁盘上却没有,重启后前后矛盾
+    if let Err(e) = state::save_repos(&app, &repos) {
+        repos.pop();
+        return Err(format!("保存文库列表失败: {e}"));
+    }
     Ok(RepoMeta { id, name, git })
+}
+
+/// 两个路径指的是不是同一个目录。先试 `canonicalize`(消掉 `..`、末尾分隔符、Windows 上的
+/// 大小写与盘符写法差异);任一侧解析不了(目录已不在)就退回规范化后的字符串比较。
+fn same_dir(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => normalize_dir(a) == normalize_dir(b),
+    }
+}
+
+fn normalize_dir(p: &str) -> String {
+    let s = p.replace('\\', "/");
+    let s = s.trim_end_matches('/');
+    if cfg!(windows) {
+        s.to_lowercase()
+    } else {
+        s.to_string()
+    }
 }
 
 /// 试着从目录里读一个文件的头几字节,确认「真的读得到内容」而不只是列得出名字。
@@ -195,7 +234,7 @@ fn open_path(state: State<'_, AppState>, path: String) -> Result<OpenedPath, Str
     let dir_str = dir.to_string_lossy().to_string();
 
     let mut repos = state.repos.lock().map_err(|e| e.to_string())?;
-    if let Some(existing) = repos.iter().find(|r| r.path == dir_str) {
+    if let Some(existing) = repos.iter().find(|r| same_dir(&r.path, &dir_str)) {
         return Ok(OpenedPath {
             repo_id: existing.id.clone(),
             path: file_name,
@@ -469,6 +508,14 @@ fn git_discard_file(app: AppHandle, repo_id: String, path: String) -> Result<(),
     gitops::discard_file(&root, &path)
 }
 
+/// 单文件「最近提交 ↔ 工作区」两侧文本(变更面板的对比视图用;行级 diff 在前端算)
+#[tauri::command(async)]
+fn git_diff_source(app: AppHandle, repo_id: String, path: String) -> Result<gitops::DiffSource, String> {
+    let root = state::repo_path(&app, &repo_id)?;
+    state::resolve_in_repo(&root, &path)?;
+    gitops::diff_source(&root, &path)
+}
+
 #[tauri::command(async)]
 fn search_repo(app: AppHandle, repo_id: String, query: String) -> Result<Vec<fsops::SearchHit>, String> {
     let root = state::repo_path(&app, &repo_id)?;
@@ -547,6 +594,49 @@ fn minimize_app(_window: tauri::WebviewWindow) -> Result<(), String> {
         Ok(())
     }
 }
+
+/// 桌面端:关闭按钮的行为。`to_tray` 为真时点 ✕ 只隐藏主窗口、进程留在系统托盘;
+/// 托盘图标也只在这时才出现 —— 用户没选这个行为就不该在托盘里多一个图标。
+/// 前端启动时与设置切换时各调一次。Android 没有托盘,只记个值。
+#[tauri::command]
+fn set_close_behavior(app: AppHandle, state: State<'_, AppState>, to_tray: bool) -> Result<(), String> {
+    state
+        .close_to_tray
+        .store(to_tray, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        if to_tray {
+            tray::ensure(&app)?;
+        } else {
+            tray::remove(&app);
+        }
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let _ = app;
+    Ok(())
+}
+
+/// 窗口事件:主窗口的关闭请求在"收进托盘"模式下改为隐藏。副窗口(以新窗口打开)照常关掉。
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        if window.label() != "main" {
+            return;
+        }
+        let to_tray = window
+            .app_handle()
+            .state::<AppState>()
+            .close_to_tray
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if to_tray {
+            api.prevent_close();
+            let _ = window.hide();
+        }
+    }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn handle_window_event(_window: &tauri::Window, _event: &tauri::WindowEvent) {}
 
 /// 单个条目的信息(右键 / 长按 →「文件信息」)
 #[tauri::command(async)]
@@ -976,6 +1066,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(handle_window_event)
         .manage(AppState::default())
         .register_uri_scheme_protocol("repo", |ctx, request| {
             let app = ctx.app_handle();
@@ -1032,6 +1123,7 @@ pub fn run() {
             git_pull_force,
             git_discard_file,
             git_sync,
+            git_diff_source,
             search_repo,
             save_token,
             list_token_hosts,
@@ -1046,6 +1138,7 @@ pub fn run() {
             request_storage_access,
             set_immersive,
             minimize_app,
+            set_close_behavior,
             abs_path,
             entry_info,
             list_dirs,

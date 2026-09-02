@@ -41,6 +41,8 @@ interface Persisted {
   autoSave: boolean
   paperLight: PaperLight
   paperDark: PaperDark
+  /** 桌面端:点关闭按钮是收进系统托盘(true)还是退出程序(false,默认,与旧版一致) */
+  closeToTray: boolean
 }
 
 /** v0.4.0 及更早的存档形态,只在迁移时用到 */
@@ -65,6 +67,7 @@ export const useSettings = defineStore('settings', () => {
   const fontSize = ref<number>(saved.fontSize ?? 16)
   const autoPull = ref<boolean>(saved.autoPull ?? true)
   const autoSave = ref<boolean>(saved.autoSave ?? false)
+  const closeToTray = ref<boolean>(saved.closeToTray ?? false)
 
   // ---- 旧字段迁移(只在旧存档里还有对应键时才生效,迁完写回新键) ----
   // serifBody 是个二选一开关,现在并入 bodyFont 这个自由字体名
@@ -96,7 +99,7 @@ export const useSettings = defineStore('settings', () => {
   watch(
     [
       brand, mode, width, fontSize, bodyFont, lineHeight, paraGap, letterSpacing,
-      indent, autoPull, autoSave, paperLight, paperDark,
+      indent, autoPull, autoSave, paperLight, paperDark, closeToTray,
     ],
     () => {
       const data: Persisted = {
@@ -113,6 +116,7 @@ export const useSettings = defineStore('settings', () => {
         autoSave: autoSave.value,
         paperLight: paperLight.value,
         paperDark: paperDark.value,
+        closeToTray: closeToTray.value,
       }
       localStorage.setItem(KEY, JSON.stringify(data))
     },
@@ -122,7 +126,7 @@ export const useSettings = defineStore('settings', () => {
   return {
     brand, mode, width, fontSize, bodyFont,
     lineHeight, paraGap, letterSpacing, indent,
-    autoPull, autoSave, paperLight, paperDark,
+    autoPull, autoSave, paperLight, paperDark, closeToTray,
     isDark, paper, applyTypo,
   }
 })

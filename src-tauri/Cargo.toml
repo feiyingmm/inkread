@@ -1,6 +1,6 @@
 [package]
 name = "inkread"
-version = "0.6.0"
+version = "0.7.0"
 description = "墨阅 —— 跨平台 Markdown 阅读应用"
 authors = ["mahonggeng"]
 edition = "2021"
@@ -26,10 +26,15 @@ base64 = "0.22"
 # 纯 Rust 的 TLS 栈能一次性绕开整类问题。
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-webpki-roots"] }
 sha2 = "0.10"
+# 文本文件解码兜底:desktop.ini 是 UTF-16 LE、老工具导出的 sql/ini 常是 GBK,
+# `read_to_string` 一碰就报 "stream did not contain valid UTF-8"。纯 Rust,Android 交叉编译无负担。
+encoding_rs = "0.8"
 
-# 桌面:单实例(双击 md 文件复用已开窗口)
+# 桌面:单实例(双击 md 文件复用已开窗口)+ 系统托盘(关闭按钮可选"收进托盘")。
+# tray-icon 只在这张桌面表里开:Android 没有托盘,别让它进 Android 的依赖图。
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"
+tauri = { version = "2", features = ["tray-icon"] }
 
 # Android 交叉编译:静态 openssl(M5 启用 android target 时生效);jni 供授权页拉起/WebView 设置
 [target.'cfg(target_os = "android")'.dependencies]

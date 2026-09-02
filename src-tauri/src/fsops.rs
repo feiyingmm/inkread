@@ -157,8 +157,28 @@ fn build_tree_inner(
     Ok(nodes)
 }
 
+/// 文本解码:BOM → UTF-8 → GB18030 三级兜底。
+///
+/// 不是所有文本文件都是 UTF-8:Windows 自己写的 `desktop.ini` 是 UTF-16 LE(带 BOM),
+/// 老工具导出的 sql / ini / txt 常是 GBK(简中 ANSI 代码页)。`read_to_string` 一碰就是
+/// "stream did not contain valid UTF-8",整篇打不开(2026-09-02 用户反馈)。
+/// 第一级 `UTF_8.decode` 自带 BOM 嗅探(UTF-8 / UTF-16 LE / BE 都认);UTF-8 解出错且没有 BOM
+/// 指明别的编码时,按 GB18030 再解一遍 —— 宁可偶有替换字符,也不让整篇读不了。
+/// Node 侧 dev-server 有同规则的一份(middleware.ts `decodeText`),两端输出一致。
+pub fn decode_text(bytes: &[u8]) -> String {
+    let (text, encoding, had_errors) = encoding_rs::UTF_8.decode(bytes);
+    if !had_errors || encoding != encoding_rs::UTF_8 {
+        return text.into_owned();
+    }
+    encoding_rs::GB18030
+        .decode_without_bom_handling(bytes)
+        .0
+        .into_owned()
+}
+
 pub fn read_file(abs: &PathBuf) -> Result<FileContent, String> {
-    let content = fs::read_to_string(abs).map_err(|e| format!("读取失败: {e}"))?;
+    let bytes = fs::read(abs).map_err(|e| format!("读取失败: {e}"))?;
+    let content = decode_text(&bytes);
     let mtime = fs::metadata(abs)
         .and_then(|m| m.modified())
         .ok()
@@ -236,7 +256,8 @@ pub fn entry_info(abs: &Path, rel: &str) -> Result<EntryInfo, String> {
             .map(|e| e.to_string_lossy().to_lowercase())
             .unwrap_or_default();
         if TEXT_EXTS.contains(&ext.as_str()) && meta.len() <= 4 * 1024 * 1024 {
-            if let Ok(text) = fs::read_to_string(abs) {
+            if let Ok(bytes) = fs::read(abs) {
+                let text = decode_text(&bytes);
                 info.lines = Some(text.lines().count() as u32);
                 info.chars = Some(text.chars().count() as u32);
             }

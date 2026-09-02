@@ -32,6 +32,9 @@ pub struct AppState {
     /// 窗口 label → 该窗口开机要打开的目标;前端启动时取走一次。
     /// 多窗口共用同一个进程(保留单实例),所以注册表只有一份、不会互相覆盖。
     pub window_targets: Mutex<std::collections::HashMap<String, WindowTarget>>,
+    /// 桌面端:主窗口点 ✕ 是收进系统托盘(true)还是退出进程(false)。
+    /// 设置存在前端 localStorage 里,由前端在启动与切换时同步过来;默认 false 与改造前一致。
+    pub close_to_tray: std::sync::atomic::AtomicBool,
 }
 
 fn config_dir(app: &AppHandle) -> PathBuf {

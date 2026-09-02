@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { loadRepos, findRepo, resolveInRepo, type DevRepo } from './repos'
-import { gitPull, gitPullForce, gitStatus, gitSync, run } from './git'
+import { gitPull, gitPullForce, gitStatus, gitSync, run, runRaw } from './git'
 
 const TEXT_EXT = new Set(['md', 'markdown', 'txt', 'sql', 'html', 'htm', 'json', 'yml', 'yaml', 'xml', 'csv', 'js', 'ts', 'css', 'sh', 'py', 'java', 'properties', 'conf', 'ini', 'log'])
 const MIME: Record<string, string> = {
@@ -241,6 +241,26 @@ async function entryInfo(abs: string, rel: string) {
   return info
 }
 
+/**
+ * 文本解码:BOM → UTF-8 → GB18030,与 Rust 侧 fsops::decode_text 同规则。
+ * Node 的 `readFile(abs, 'utf-8')` 遇到 GBK 会静默给一串 �,Rust 的 read_to_string 则直接报错,
+ * 两端表现不一致;统一成"能解就解、解不出再按 GB18030 兜底"。
+ */
+function decodeText(buf: Buffer): string {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return new TextDecoder('utf-16le').decode(buf.subarray(2))
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return new TextDecoder('utf-16be').decode(buf.subarray(2))
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf)
+  } catch {
+    return new TextDecoder('gb18030').decode(buf)
+  }
+}
+
+/** 与 git 同一判定:前 8000 字节含 NUL 即二进制 */
+function looksBinary(buf: Buffer | null, max: number): boolean {
+  return !!buf && (buf.length > max || buf.subarray(0, 8000).includes(0))
+}
+
 function json(res: ServerResponse, data: unknown, code = 200) {
   res.statusCode = code
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -292,8 +312,31 @@ export function inkreadDevServer(): Plugin {
             case '/file': {
               const abs = resolveInRepo(repo, relPath)
               const stat = await fsp.stat(abs)
-              const content = await fsp.readFile(abs, 'utf-8')
+              const content = decodeText(await fsp.readFile(abs))
               return json(res, { content, mtime: stat.mtimeMs })
+            }
+            case '/diff-source': {
+              // 与 Rust 侧 gitops::diff_source 同契约:基线是 HEAD(与"撤销修改"恢复的版本一致)
+              const abs = resolveInRepo(repo, relPath)
+              const MAX = 4 * 1024 * 1024
+              const show = await runRaw(repo.path, ['show', `HEAD:${relPath}`])
+              const base = show.code === 0 ? show.stdout : null
+              let current: Buffer | null = null
+              try {
+                current = await fsp.readFile(abs)
+              } catch {
+                current = null
+              }
+              const sizes = { baseSize: base?.length ?? 0, currentSize: current?.length ?? 0 }
+              if (looksBinary(base, MAX) || looksBinary(current, MAX)) {
+                return json(res, { base: null, current: null, binary: true, ...sizes })
+              }
+              return json(res, {
+                base: base ? decodeText(base) : null,
+                current: current ? decodeText(current) : null,
+                binary: false,
+                ...sizes,
+              })
             }
             case '/raw': {
               const abs = resolveInRepo(repo, relPath)

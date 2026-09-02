@@ -20,14 +20,22 @@ export interface PdfOutlineItem {
 
 let loading: Promise<typeof import('pdfjs-dist')> | null = null
 
-/** 动态载入 pdf.js 并配好 worker(只做一次) */
+/**
+ * 动态载入 pdf.js 并配好 worker(只做一次)。
+ *
+ * 用的是 **legacy 构建**而不是默认构建:pdf.js 6 的默认构建直接调用 `Uint8Array.prototype.toHex`、
+ * `Promise.try`、`Iterator` helpers 这些 2025 年才进浏览器的 API,不带任何 polyfill;
+ * 手机上的 Android WebView 往往落后桌面 WebView2 好几个版本,一开 PDF 就在 worker 里死于
+ * `n.toHex is not a function`(2026-09-02 用户反馈,同一份 PDF 电脑端正常)。legacy 构建自带
+ * core-js 那一小撮 polyfill,主线程 + worker 各多约 60KB,换来两端都能开。
+ */
 export function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
   loading ??= (async () => {
     const [pdfjs, worker] = await Promise.all([
-      import('pdfjs-dist'),
+      import('pdfjs-dist/legacy/build/pdf.mjs'),
       // `?url` 让 vite 把 worker 产物单独出一份文件并给出可用地址,
       // 不能直接 import 它的模块(worker 里跑的是另一套全局环境)
-      import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+      import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
     ])
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default
     return pdfjs

@@ -1,5 +1,5 @@
 <template>
-  <div ref="scroller" class="content pdf-view">
+  <div ref="scroller" class="content pdf-view" @click="onClick">
     <div class="read-progress"><div class="read-progress__bar" :style="{ width: progress + '%' }"></div></div>
 
     <FindBar
@@ -76,7 +76,21 @@ const emit = defineEmits<{
   toc: [items: TocItem[]]
   rendered: []
   title: [text: string]
+  /** 点到正文空白(不是缩放条 / 回顶 / 查找条):手机端用它切换沉浸阅读 */
+  'tap-blank': []
 }>()
+
+/**
+ * 点空白 = 切换沉浸阅读,与 MarkdownView / EbookView 同一约定。
+ * 文本层盖在整页上,点到字也算点页面;只排除控件,以及划选文字松手带来的那次 click。
+ */
+function onClick(e: MouseEvent): void {
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  if (target.closest('.pdf-bar, .back-top, .find-bar')) return
+  if (window.getSelection()?.toString()) return
+  emit('tap-blank')
+}
 
 interface PageBox {
   num: number

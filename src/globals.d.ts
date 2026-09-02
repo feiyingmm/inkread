@@ -10,3 +10,11 @@ declare module 'highlight.js/lib/languages/*' {
   const language: LanguageFn
   export default language
 }
+
+/**
+ * pdfjs-dist 的 legacy 构建(带 polyfill,给老版 Android WebView 用,见 core/pdf.ts)
+ * 与默认构建同一套 API,但包里没有给这条子路径配 .d.ts,这里把类型指回主包。
+ */
+declare module 'pdfjs-dist/legacy/build/pdf.mjs' {
+  export * from 'pdfjs-dist'
+}

@@ -2,6 +2,7 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
   Backend,
+  DiffSource,
   EntryInfo,
   FileContent,
   FontManifest,
@@ -43,6 +44,7 @@ export const tauriBackend: Backend = {
   renameEntry: (repoId, from, to) => invoke<void>('rename_entry', { repoId, from, to }),
   deleteEntry: (repoId, path) => invoke<void>('delete_entry', { repoId, path }),
   discardFile: (repoId, path) => invoke<void>('git_discard_file', { repoId, path }),
+  gitDiffSource: (repoId, path) => invoke<DiffSource>('git_diff_source', { repoId, path }),
   absPath: (repoId, path) => invoke<string>('abs_path', { repoId, path }),
   entryInfo: (repoId, path) => invoke<EntryInfo>('entry_info', { repoId, path }),
   fontManifest: () => invoke<FontManifest>('font_manifest'),

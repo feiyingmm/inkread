@@ -78,6 +78,13 @@ export interface SanitizeHooks {
 /** 一律剥掉的元素:脚本、书自带样式(排版由墨阅接管)、外部嵌入 */
 const DROP_TAGS = ['script', 'style', 'link', 'iframe', 'object', 'embed', 'base', 'meta']
 
+/**
+ * 书里的颜色 / 字体类**展示属性**(`<font color face>`、`<td bgcolor>`、`<div background>`):
+ * 与行内 style 是一回事 —— 浅色纸上一段 `#92EBA8` 的绿字、指定某款本机没有的字体,
+ * 都是在跟纸色与字体设置抢话。电子书模式下一并剥掉;`size` / `align` 留着,它们只关乎层级与对齐。
+ */
+const PRESENTATION_ATTRS = new Set(['color', 'bgcolor', 'background', 'face'])
+
 /** 书内跳转落在这两个属性上,由视图接管点击 */
 export const CHAPTER_ATTR = 'data-book-chapter'
 export const ANCHOR_ATTR = 'data-book-anchor'
@@ -112,6 +119,8 @@ export function sanitizeChapterHtml(html: string, hooks: SanitizeHooks): EbookRe
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase()
       if (name.startsWith('on') || (name === 'href' && /^\s*javascript:/i.test(attr.value))) {
+        el.removeAttribute(attr.name)
+      } else if (!hooks.keepInlineStyle && PRESENTATION_ATTRS.has(name)) {
         el.removeAttribute(attr.name)
       }
     }
