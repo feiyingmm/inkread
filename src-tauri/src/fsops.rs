@@ -71,8 +71,23 @@ fn is_ignored(repo: Option<&git2::Repository>, rel_path: &str) -> bool {
     }
 }
 
+/// 只认「文库根自己就是仓库」这一种情况。
+///
+/// `Repository::open` 会**沿父目录往上搜**:把某个 git 仓库里的子目录当文库添加时
+/// (`D:/repo/docs`,或普通文件夹恰好躺在别人的仓库里),它会打开外层那个仓库,
+/// 而我们喂给 `is_path_ignored` 的路径是相对文库根的 —— 两套基准一对不上,
+/// 忽略判定就会张冠李戴,轻则漏文件、重则整棵树为空。
+/// 所以先看根下有没有 `.git`,没有就当普通文件夹处理,不做 ignore 过滤。
+fn open_repo_at(root: &Path) -> Option<git2::Repository> {
+    if root.join(".git").exists() {
+        git2::Repository::open(root).ok()
+    } else {
+        None
+    }
+}
+
 pub fn build_tree(root: &Path, rel: &str) -> Result<Vec<TreeNode>, String> {
-    let repo = git2::Repository::open(root).ok();
+    let repo = open_repo_at(root);
     build_tree_inner(root, rel, repo.as_ref())
 }
 
@@ -233,7 +248,7 @@ pub fn entry_info(abs: &Path, rel: &str) -> Result<EntryInfo, String> {
 pub fn search(root: &Path, query: &str) -> Result<Vec<SearchHit>, String> {
     let q = query.to_lowercase();
     let mut hits: Vec<SearchHit> = Vec::new();
-    let repo = git2::Repository::open(root).ok();
+    let repo = open_repo_at(root);
     walk_search(root, "", &q, query.chars().count(), &mut hits, repo.as_ref())?;
     Ok(hits)
 }

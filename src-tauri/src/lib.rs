@@ -14,6 +14,15 @@ use tauri::{AppHandle, Manager, State};
 struct RepoMeta {
     id: String,
     name: String,
+    /// 是不是 git 仓库。普通文件夹也能当文库(看本地小说/散落的 md),
+    /// 这时同步、变更、拉取那一套全都不适用,前端据此收起相关入口。
+    git: bool,
+}
+
+/// 每次列举时现探,不写进 repos.json:用户后来自己 `git init` 了也能立刻认出来,
+/// 老配置文件也不用迁移。
+fn is_git_repo(path: &str) -> bool {
+    PathBuf::from(path).join(".git").exists()
 }
 
 #[tauri::command]
@@ -24,6 +33,7 @@ fn list_repos(state: State<'_, AppState>) -> Result<Vec<RepoMeta>, String> {
         .map(|r| RepoMeta {
             id: r.id.clone(),
             name: r.name.clone(),
+            git: is_git_repo(&r.path),
         })
         .collect())
 }
@@ -31,13 +41,21 @@ fn list_repos(state: State<'_, AppState>) -> Result<Vec<RepoMeta>, String> {
 #[tauri::command(async)]
 fn add_repo_local(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<RepoMeta, String> {
     let p = PathBuf::from(&path);
-    if !p.join(".git").exists() {
-        return Err("所选目录不是 git 仓库(缺少 .git)".into());
+    if !p.is_dir() {
+        return Err(format!("{}目录不存在或不可读: {path}", storage_hint()));
     }
-    // 「有 .git 目录」≠「读得到里面的文件」。Android 分区存储下目录一律可见、文件却读不到,
-    // 不当场验一次就会得到一个「只有目录没有文件、git 状态不可用」的空壳文库(v0.3.3 的真实故障)。
-    if let Err(e) = git2::Repository::open(&p) {
-        return Err(format!("{}{}", storage_hint(), e.message()));
+    // 普通文件夹也收(本地小说、散落的 md);是 git 仓库就顺手校验一遍。
+    //
+    // 「目录列得出来」≠「读得到里面的文件」:Android 分区存储下目录一律可见、文件却读不到,
+    // 不当场验一次就会得到一个「只有目录没有文件」的空壳文库(v0.3.3 的真实故障)。
+    // git 库靠 Repository::open 撞这个墙,普通文件夹没有 .git 可验,只能试读一个文件。
+    let git = p.join(".git").exists();
+    if git {
+        if let Err(e) = git2::Repository::open(&p) {
+            return Err(format!("{}{}", storage_hint(), e.message()));
+        }
+    } else if let Err(e) = probe_readable(&p) {
+        return Err(format!("{}{e}", storage_hint()));
     }
     let name = p
         .file_name()
@@ -60,7 +78,26 @@ fn add_repo_local(app: AppHandle, state: State<'_, AppState>, path: String) -> R
         ephemeral: false,
     });
     state::save_repos(&app, &repos)?;
-    Ok(RepoMeta { id, name })
+    Ok(RepoMeta { id, name, git })
+}
+
+/// 试着从目录里读一个文件的头几字节,确认「真的读得到内容」而不只是列得出名字。
+/// 目录里一个文件都没有(只有子目录)时视为通过 —— 空目录本身不是错误。
+fn probe_readable(dir: &std::path::Path) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("无法读取目录: {e}"))?;
+    for ent in entries.filter_map(|e| e.ok()) {
+        if !ent.path().is_file() {
+            continue;
+        }
+        let mut f = std::fs::File::open(ent.path()).map_err(|e| format!("目录里的文件读不出来: {e}"))?;
+        let mut buf = [0u8; 1];
+        return match std::io::Read::read(&mut f, &mut buf) {
+            // 读到 0 字节也算通过:那是个空文件,不是权限问题
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("目录里的文件读不出来: {e}")),
+        };
+    }
+    Ok(())
 }
 
 /// 从文库列表移除一条记录。**只摘注册表,不删磁盘上的任何文件**——
@@ -129,7 +166,8 @@ fn add_repo_clone(
         ephemeral: false,
     });
     state::save_repos(&app, &repos)?;
-    Ok(RepoMeta { id, name })
+    // 克隆来的必然是 git 仓库
+    Ok(RepoMeta { id, name, git: true })
 }
 
 #[derive(Serialize)]
@@ -444,6 +482,17 @@ fn search_repo(app: AppHandle, repo_id: String, query: String) -> Result<Vec<fso
 #[tauri::command(async)]
 fn export_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("写入失败: {e}"))
+}
+
+/// 同上,但写二进制(导出 PNG 长图用)。走 base64 是因为 IPC 只传 JSON,
+/// 与 `write_binary` 同一套解码,区别只在这个可以写到仓库外。
+#[tauri::command(async)]
+fn export_binary(path: String, base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64.as_bytes())
+        .map_err(|e| format!("图片数据解码失败: {e}"))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("写入失败: {e}"))
 }
 
 /// Android:探测是否真的拿到了「所有文件访问」(MANAGE_EXTERNAL_STORAGE)。
@@ -992,6 +1041,7 @@ pub fn run() {
             font_install,
             font_uninstall,
             export_file,
+            export_binary,
             check_storage_access,
             request_storage_access,
             set_immersive,

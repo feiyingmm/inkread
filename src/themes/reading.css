@@ -22,6 +22,32 @@
   max-width: none;
 }
 
+/**
+ * 自带样式的 HTML 文档:原样渲染的容器。
+ *
+ * 刻意**不给任何排版**——文档自己的 CSS 已经作用域化注进来了(见 core/html-doc.ts),
+ * 这里只做三件不会改变设计的事:给它一个定位参照、把超宽内容收进视口、
+ * 补一个字体兜底(文档没指定字体时不至于落到衬线默认值)。
+ */
+.ink-html {
+  position: relative;
+  max-width: 100%;
+  overflow-x: auto;
+  font-family: var(--font-body);
+  color: var(--t1);
+}
+.ink-html img,
+.ink-html svg,
+.ink-html video {
+  max-width: 100%;
+  height: auto;
+}
+/* 文档里若有 position:fixed 的角标/浮层,别让它糊到应用界面上 */
+.ink-html [style*="position: fixed"],
+.ink-html [style*="position:fixed"] {
+  position: absolute !important;
+}
+
 /* ---------- 标题(衬线) ---------- */
 .prose h1,
 .prose h2,
@@ -597,11 +623,21 @@
 
 /* ---------- 打印 / 另存 PDF:满纸宽,且折叠的章节要打全 ---------- */
 @media print {
+  /* 纸张边距统一在这里定,和导出 PNG 时那张"离屏纸"的留边取同一个量级,
+     两者出来的版式才对得上(见 core/export.ts 的 PAGE_PADDING) */
+  @page {
+    margin: 10mm;
+  }
   .prose {
     max-width: none;
   }
   .prose-wrap {
     padding: 0;
+  }
+  /* 自带样式的 HTML 文档:打印时铺满纸宽,别留屏幕上那套横向滚动 */
+  .ink-html {
+    max-width: none;
+    overflow: visible;
   }
   .fold-hidden {
     display: revert !important;

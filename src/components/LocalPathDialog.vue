@@ -1,14 +1,14 @@
 <template>
-  <MobilePage title="添加本地仓库" :busy="busy" :mask-close="!busy" @back="emit('close')">
+  <MobilePage title="添加本地文库" :busy="busy" :mask-close="!busy" @back="emit('close')">
     <!-- 没有「所有文件访问」时什么都别放行:Android 分区存储下目录列得出来、
          文件却读不到,放行只会得到一个"只有目录没有文件"的空壳文库 -->
     <div v-if="permChecked && !permOk" class="perm">
       <div class="perm-ic"><Icon name="shield" :size="30" /></div>
       <h4 class="perm-h">需要「所有文件访问」权限</h4>
       <p class="perm-p">
-        墨阅要读取手机里的 git 文库目录。Android 从 11 起把这类访问收紧了——
+        墨阅要读取手机里的文库目录。Android 从 11 起把这类访问收紧了——
         <b>没有这个权限时,目录能列出来,但里面的文件一个都读不到</b>,
-        文件树会只剩空目录、git 状态也不可用。
+        文件树会只剩空目录。
       </p>
       <p class="perm-p">在系统授权页里找到「墨阅」并打开开关,返回后会自动继续。</p>
       <button class="opt is-on perm-btn" @click="requestPerm">去开启权限</button>
@@ -22,6 +22,8 @@
         </button>
         <div class="bb-path" :title="listing?.path ?? startPath">{{ listing?.path ?? startPath }}</div>
       </div>
+
+      <p class="browse-tip">git 仓库和普通文件夹都能当文库;普通文件夹只是没有同步功能。</p>
 
       <div class="browse-list">
         <div v-if="browseError" class="browse-empty">{{ browseError }}</div>
@@ -54,8 +56,8 @@
       <button class="opt" :disabled="busy" @click="emit('close')">取消</button>
       <button
         class="opt is-on"
-        :disabled="busy || !listing?.isGit"
-        :title="listing?.isGit ? '把当前打开的目录添加为文库' : '当前目录不是 git 仓库(缺少 .git)'"
+        :disabled="busy || !listing"
+        :title="listing?.isGit ? '把当前打开的目录添加为文库(git 仓库)' : '把当前打开的目录添加为文库(普通文件夹,无同步)'"
         @click="listing && addPath(listing.path)"
       >
         {{ busy ? '添加中…' : '添加当前目录' }}
@@ -114,7 +116,8 @@ async function load(path: string): Promise<void> {
 function enter(d: DirItem): void {
   if (!listing.value) return
   const next = `${listing.value.path.replace(/[/\\]$/, '')}/${d.name}`
-  // 点到 git 仓库目录:直接作为文库添加;普通目录则进入继续浏览
+  // 点到 git 仓库目录:直接作为文库添加(这是最常见的意图);
+  // 普通目录一律进入继续浏览 —— 想把它本身当文库就用底部的「添加当前目录」
   if (d.hasGit) {
     void addPath(next)
   } else {
@@ -301,6 +304,12 @@ onBeforeUnmount(() => {
   background: var(--accent-soft);
   color: var(--accent-deep);
   border: 1px solid var(--accent-line);
+}
+.browse-tip {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--t3);
 }
 .manual-fold {
   margin-top: 14px;

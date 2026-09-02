@@ -6,9 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -148,9 +150,40 @@ pub fn fetch_manifest(app: &AppHandle) -> Result<Manifest, String> {
     Err(format!("获取字体清单失败({last})"))
 }
 
+/// 正在下载中的字体 id。`font_install` 是同步命令,Tauri 会把每次调用丢到线程池的
+/// 独立线程上跑 —— 同一款字体被点两次就是两个线程往同一个 `<id>.part` 写,
+/// 进度乱跳,先跑完的把 .part rename 走,后跑完的回读时 ENOENT
+/// (「回读字体文件失败:系统找不到指定的文件。(os error 2)」)。前端已有一道拦,
+/// 这里再兜一道:同 id 只许一个在跑,多窗口/多次 invoke 都拦得住。
+fn inflight() -> &'static Mutex<HashSet<String>> {
+    static SET: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    SET.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// 出了任何分支(成功/报错/panic 展开)都要把 id 摘掉,否则这款字体再也下不了了
+struct InflightGuard(String);
+
+impl Drop for InflightGuard {
+    fn drop(&mut self) {
+        if let Ok(mut set) = inflight().lock() {
+            set.remove(&self.0);
+        }
+    }
+}
+
 /// 下载并安装一款字体。边下边 `emit` 进度;下完校验 sha256,不符直接删文件报错 ——
 /// 半截字体装上去正文会变成一片豆腐块,比下载失败难查得多。
 pub fn install(app: &AppHandle, meta: &FontMeta) -> Result<InstalledFont, String> {
+    let _guard = {
+        let mut set = inflight()
+            .lock()
+            .map_err(|_| "下载状态异常,请重启应用后再试".to_string())?;
+        if !set.insert(meta.id.clone()) {
+            return Err(format!("{} 正在下载中,请等它下完", meta.name));
+        }
+        InflightGuard(meta.id.clone())
+    };
+
     let dir = fonts_dir(app)?;
     let dest = dir.join(&meta.file);
     let tmp = dir.join(format!("{}.part", meta.id));

@@ -28,8 +28,15 @@ function sortNodes(nodes: TreeNode[]): void {
   for (const n of nodes) if (n.children) sortNodes(n.children)
 }
 
-/** git 仓库:文件树 = 受版本控制 + 未被 .gitignore 忽略的文件(与文档库语义一致) */
+/**
+ * git 仓库:文件树 = 受版本控制 + 未被 .gitignore 忽略的文件(与文档库语义一致)。
+ *
+ * **只在文库根自己就是仓库时才走 git**:git 命令会沿父目录往上找仓库,拿一个躺在
+ * 别人仓库里的普通文件夹跑 `ls-files`,判定用的是外层仓库的 .gitignore ——
+ * 该目录整个被忽略时返回空,文件树就空白了。与 Rust 侧 fsops::open_repo_at 同规则。
+ */
 async function listRepoFiles(repoPath: string): Promise<string[] | null> {
+  if (!fs.existsSync(path.join(repoPath, '.git'))) return null
   const r = await run(repoPath, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])
   if (r.code !== 0) return null
   return r.stdout.split('\0').filter((s) => s.length > 0 && !s.startsWith('.git/'))
@@ -265,7 +272,15 @@ export function inkreadDevServer(): Plugin {
           const relPath = url.searchParams.get('path') ?? ''
 
           if (route === '/repos') {
-            return json(res, loadRepos().map(({ id, name }) => ({ id, name })))
+            return json(
+              res,
+              // git 标志与 Rust 侧同规则:现探 .git,不落配置
+              loadRepos().map(({ id, name, path: repoPath }) => ({
+                id,
+                name,
+                git: fs.existsSync(path.join(repoPath, '.git')),
+              })),
+            )
           }
 
           const repo = findRepo(repoId)

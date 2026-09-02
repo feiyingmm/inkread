@@ -2,18 +2,24 @@
   <div ref="scroller" class="content" @click="onClick">
     <div class="read-progress"><div class="read-progress__bar" :style="{ width: progress + '%' }"></div></div>
 
-    <div v-if="searchNav" class="search-nav">
-      <span class="sn-count">{{ searchNav.idx + 1 }}/{{ searchNav.total }}</span>
-      <button class="sn-btn" title="上一处" @click="stepHit(-1)"><Icon name="chevron-up" :size="16" /></button>
-      <button class="sn-btn" title="下一处" @click="stepHit(1)"><Icon name="chevron-down" :size="16" /></button>
-      <button class="sn-btn" title="清除高亮" @click="clearSearch()"><Icon name="close" :size="15" /></button>
-    </div>
+    <FindBar
+      v-if="findOpen"
+      :key="findKey"
+      :total="searchNav?.total ?? 0"
+      :index="searchNav?.idx ?? 0"
+      :initial="findInitial"
+      @search="runFind"
+      @step="stepHit"
+      @close="closeFind"
+    />
 
     <!-- 长表格的浮动表头:滚过表头后另画一份钉在内容区顶部(见 core/markdown/enhance.ts) -->
     <div ref="floatHeadEl" class="table-float-head" hidden></div>
 
     <div class="prose-wrap">
       <div v-if="errorMsg" class="doc-error">{{ errorMsg }}</div>
+      <!-- 自带样式的 HTML 文档:原样渲染,不套 .prose(否则它的卡片布局会被我们的排版改掉) -->
+      <div v-else-if="htmlStyled" ref="proseEl" :class="HTML_DOC_SCOPE" v-html="html"></div>
       <div
         v-else
         ref="proseEl"
@@ -39,14 +45,18 @@ import { useBackLayerWhen } from '@/core/backstack'
 import { backend } from '@/core/backend'
 import { dirOf, extOf, fileKind } from '@/core/paths'
 import { highlightCode, renderMarkdown, renderPlainText, type TocItem } from '@/core/markdown/pipeline'
+import { HTML_DOC_SCOPE, renderHtmlDoc } from '@/core/html-doc'
 import { formatJson } from '@/core/json-format'
 import { transformInfoCards } from '@/core/markdown/infocard'
 import { buildFloatHead, headingText, markTallTables, setupCodeBlocks, setupHeadingAnchors } from '@/core/markdown/enhance'
 import { copyText } from '@/core/clipboard'
 import { renderMermaidBlocks } from '@/core/markdown/mermaid'
+import { loadPos, savePos, clearPos } from '@/core/reading-pos'
 import { useSettings } from '@/stores/settings'
 import { toast } from '@/core/toast'
 import Icon from '@/components/Icon.vue'
+import FindBar from '@/components/FindBar.vue'
+import { clearHighlights as clearHl, findRanges, paintHighlights, revealRange, stepIndex } from '@/core/find-in-dom'
 
 const props = defineProps<{
   repoId: string
@@ -80,20 +90,18 @@ let loadSeq = 0
 let currentKind = ''
 let rawContent = ''
 const sourceMode = ref(false)
+/** 当前是"自带样式的 HTML 文档"——原样渲染,墨阅的排版与增强都不插手 */
+const htmlStyled = ref(false)
 let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 let searchRanges: Range[] = []
 
-function scrollKey(): string {
-  return `inkread:scroll:${props.repoId}:${props.path}`
-}
+const findOpen = ref(false)
+const findInitial = ref('')
+/** 换文档时给 FindBar 换 key,好让它带着新的初始词重新挂载 */
+const findKey = ref(0)
 
 function clearHighlights(): void {
-  try {
-    CSS.highlights?.delete('inkread-search')
-    CSS.highlights?.delete('inkread-search-current')
-  } catch {
-    /* 不支持 Highlight API 时忽略 */
-  }
+  clearHl()
 }
 
 function clearSearch(): void {
@@ -102,19 +110,31 @@ function clearSearch(): void {
   searchNav.value = null
 }
 
-/** markdown 内容按当前视图模式(渲染/源码)生成 html */
+/** markdown / html 内容按当前视图模式(渲染/源码)生成 html */
 function renderNow(): void {
   if (sourceMode.value) {
-    html.value = renderPlainText(rawContent, 'markdown')
+    htmlStyled.value = false
+    html.value = renderPlainText(rawContent, currentKind === 'html' ? 'html' : 'markdown')
     emit('toc', [])
-  } else {
-    const result = renderMarkdown(rawContent, {
+    return
+  }
+  if (currentKind === 'html') {
+    const doc = renderHtmlDoc(rawContent, {
       docDir: dirOf(props.path),
       assetUrl: (p) => backend.assetUrl(props.repoId, p),
     })
-    html.value = result.html
-    emit('toc', result.toc)
+    htmlStyled.value = doc.styled
+    html.value = doc.html
+    emit('toc', doc.toc)
+    return
   }
+  htmlStyled.value = false
+  const result = renderMarkdown(rawContent, {
+    docDir: dirOf(props.path),
+    assetUrl: (p) => backend.assetUrl(props.repoId, p),
+  })
+  html.value = result.html
+  emit('toc', result.toc)
 }
 
 async function load(): Promise<void> {
@@ -136,7 +156,7 @@ async function load(): Promise<void> {
   try {
     if (kind === 'image') {
       html.value = `<p style="text-align:center"><img src="${backend.assetUrl(props.repoId, props.path)}" alt=""></p>`
-    } else if (kind === 'markdown') {
+    } else if (kind === 'markdown' || kind === 'html') {
       const file = await backend.readFile(props.repoId, props.path)
       if (seq !== loadSeq) return
       rawContent = file.content
@@ -162,19 +182,27 @@ async function load(): Promise<void> {
 function afterRender(): void {
   const root = proseEl.value
   if (!root) return
-  if (currentKind === 'markdown' && !sourceMode.value) {
-    transformInfoCards(root)
-    void renderMermaidBlocks(root, settings.isDark)
-    setupFolding(root)
-    setupHeadingAnchors(root)
-    markTallTables(root)
+  const rich = (currentKind === 'markdown' || currentKind === 'html') && !sourceMode.value
+  if (rich) {
+    // 自带样式的 HTML 原样呈现:折叠三角、标题锚点、表格包裹都会动它的 DOM 结构,
+    // 一动布局就跟浏览器里不一样了 —— 只收标题用于大纲高亮
+    if (!htmlStyled.value) {
+      // 信息卡与 mermaid 是 markdown 管线特有的产物,html 文档里不会有
+      if (currentKind === 'markdown') {
+        transformInfoCards(root)
+        void renderMermaidBlocks(root, settings.isDark)
+      }
+      setupFolding(root)
+      setupHeadingAnchors(root)
+      markTallTables(root)
+    }
     headings = Array.from(root.querySelectorAll<HTMLElement>('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]'))
   } else {
     headings = []
   }
-  setupCodeBlocks(root)
-  const saved = Number(localStorage.getItem(scrollKey()) ?? 0)
-  if (scroller.value) scroller.value.scrollTop = saved
+  if (!htmlStyled.value) setupCodeBlocks(root)
+  const saved = loadPos(props.repoId, props.path)
+  if (scroller.value) scroller.value.scrollTop = saved.top
   // 换文档要丢掉上一篇的表头副本
   floatWrap = null
   if (floatHeadEl.value) floatHeadEl.value.hidden = true
@@ -183,9 +211,9 @@ function afterRender(): void {
   emit('rendered')
 }
 
-/** 切换 源码 ↔ 渲染 视图(仅 markdown) */
+/** 切换 源码 ↔ 渲染 视图(markdown 与 html) */
 async function toggleSource(): Promise<void> {
-  if (currentKind !== 'markdown') return
+  if (currentKind !== 'markdown' && currentKind !== 'html') return
   sourceMode.value = !sourceMode.value
   emit('source-mode', sourceMode.value)
   clearSearch()
@@ -318,8 +346,9 @@ function onScroll(): void {
   updateFloatHead()
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
   scrollSaveTimer = setTimeout(() => {
-    if (el.scrollTop > 40) localStorage.setItem(scrollKey(), String(el.scrollTop))
-    else localStorage.removeItem(scrollKey())
+    // 进度一起存:最近阅读列表要显示「读到 42%」,那边算不出比例(不知道总高度)
+    if (el.scrollTop > 40) savePos(props.repoId, props.path, { top: el.scrollTop, pct: progress.value })
+    else clearPos(props.repoId, props.path)
   }, 250)
   if (headings.length) {
     const top = el.scrollTop + 90
@@ -352,52 +381,45 @@ function scrollToSlug(slug: string): void {
 }
 
 // ---------- 全文搜索命中导航 ----------
-function highlightText(rawQuery: string): void {
-  const root = proseEl.value
-  const query = rawQuery.trim().toLowerCase()
-  if (!root || !query) return
+/** 打开查找条(Ctrl+F / 从全库搜索跳转过来时) */
+function openFind(initial = ''): void {
+  findInitial.value = initial
+  findKey.value++
+  findOpen.value = true
+}
+
+function closeFind(): void {
+  findOpen.value = false
   clearSearch()
-  const ranges: Range[] = []
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  let node: Node | null
-  while ((node = walker.nextNode())) {
-    const text = (node.textContent ?? '').toLowerCase()
-    let idx = 0
-    while ((idx = text.indexOf(query, idx)) >= 0) {
-      const r = new Range()
-      r.setStart(node, idx)
-      r.setEnd(node, idx + query.length)
-      ranges.push(r)
-      idx += query.length
-    }
-  }
-  if (ranges.length === 0) return
-  searchRanges = ranges
-  applyHit(0)
+}
+
+/** 查找条输入驱动 */
+function runFind(query: string): void {
+  clearSearch()
+  if (!query.trim()) return
+  searchRanges = findRanges(proseEl.value, query)
+  if (searchRanges.length > 0) applyHit(0)
+}
+
+/**
+ * 从全库搜索结果跳过来时高亮命中词。顺手把查找条也打开 ——
+ * 读者接着往下翻找同一个词是很自然的下一步。
+ */
+function highlightText(rawQuery: string): void {
+  if (!rawQuery.trim()) return
+  openFind(rawQuery)
 }
 
 function applyHit(i: number): void {
   if (searchRanges.length === 0) return
   searchNav.value = { total: searchRanges.length, idx: i }
-  try {
-    if (CSS.highlights) {
-      CSS.highlights.set('inkread-search', new Highlight(...searchRanges))
-      CSS.highlights.set('inkread-search-current', new Highlight(searchRanges[i]))
-    }
-  } catch {
-    /* 不支持时仅滚动 */
-  }
-  const el = searchRanges[i].startContainer.parentElement
-  if (el) {
-    unfoldFor(el)
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
+  paintHighlights(searchRanges, i)
+  revealRange(searchRanges[i], unfoldFor)
 }
 
 function stepHit(dir: number): void {
   if (!searchNav.value || searchRanges.length === 0) return
-  const n = (searchNav.value.idx + dir + searchRanges.length) % searchRanges.length
-  applyHit(n)
+  applyHit(stepIndex(searchRanges.length, searchNav.value.idx, dir))
 }
 
 // ---------- json 代码块格式化 ----------
@@ -643,7 +665,7 @@ onBeforeUnmount(() => {
   clearHighlights()
 })
 
-defineExpose({ scrollToSlug, highlightText, reload: load, toggleSource })
+defineExpose({ scrollToSlug, highlightText, openFind, reload: load, toggleSource })
 </script>
 
 <style scoped>

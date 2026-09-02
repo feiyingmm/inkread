@@ -20,6 +20,11 @@
         </button>
         <span v-else class="seg" :title="seg">{{ seg }}</span>
       </template>
+      <!-- epub 的当前章名:文件名之后再缀一段,不然读到哪一章全靠正文里的标题 -->
+      <template v-if="suffix">
+        <span class="sep">·</span>
+        <span class="seg seg-sub" :title="suffix">{{ suffix }}</span>
+      </template>
     </div>
 
     <button
@@ -44,20 +49,21 @@
       <Icon name="braces" />
     </button>
     <button
-      v-if="canEdit && !editMode"
+      v-if="canSource && !editMode"
       class="tbtn hide-narrow"
       :class="{ 'is-on': sourceMode }"
-      :title="sourceMode ? '返回渲染视图 (Ctrl+/)' : '查看 Markdown 源码 (Ctrl+/)'"
+      :title="sourceMode ? '返回渲染视图 (Ctrl+/)' : '查看源码 (Ctrl+/)'"
       @click="emit('toggle-source')"
     >
       <Icon name="code" />
     </button>
-    <div v-if="canEdit && !editMode" class="hide-narrow" style="position: relative">
+    <div v-if="canSource && !editMode" class="hide-narrow" style="position: relative">
       <button class="tbtn" title="导出" @click="exportOpen = !exportOpen"><Icon name="export" /></button>
       <template v-if="exportOpen">
         <div class="repo-menu-mask" @click="exportOpen = false"></div>
         <div class="export-menu">
           <button class="repo-item" @click="doExport('html')">导出 HTML(自包含)</button>
+          <button class="repo-item" @click="doExport('image')">导出 PNG 长图</button>
           <button class="repo-item" @click="doExport('print')">打印 / 另存 PDF</button>
         </div>
       </template>
@@ -88,9 +94,13 @@ const props = defineProps<{
   canBack: boolean
   canForward: boolean
   canEdit: boolean
+  /** 能不能看源码 / 导出:markdown 与 html 都行(html 不可编辑但可读源码) */
+  canSource: boolean
   editMode: boolean
   dirty: boolean
   sourceMode: boolean
+  /** 面包屑末尾追加的一段(epub 用来显示当前章名) */
+  suffix?: string
 }>()
 
 const emit = defineEmits<{
@@ -103,7 +113,7 @@ const emit = defineEmits<{
   save: []
   'toggle-source': []
   'format-json': []
-  export: [type: 'html' | 'print']
+  export: [type: 'html' | 'print' | 'image']
   crumb: [dirPath: string]
 }>()
 
@@ -114,7 +124,7 @@ const fullPath = computed(() => [props.repoName, ...segments.value].filter(Boole
 
 const exportOpen = ref(false)
 
-function doExport(type: 'html' | 'print'): void {
+function doExport(type: 'html' | 'print' | 'image'): void {
   exportOpen.value = false
   emit('export', type)
 }
