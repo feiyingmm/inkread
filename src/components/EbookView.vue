@@ -102,6 +102,16 @@ interface LoadedChapter {
 
 /** DOM 里最多同时留几章。3 章足够让上下滚动都不见空白,又不至于把节点树撑爆 */
 const MAX_LOADED = 3
+/**
+ * 窗口至少要有几屏高。
+ *
+ * 往后接章的阈值是"离底不到 1 屏",往前是"离顶不到半屏" —— 两者**不能同时成立**,否则每次滚动
+ * 都先命中 appendNext,窗口只会往后走、永远回不到前面的章(实测 30 章 × 65px 的书:
+ * scrollTop=0 时 bottomGap=65 照样 < clientHeight,向上滚反而把内容往后推)。
+ * 1(视口)+ 1(底部预留)+ 0.5(顶部预留)= 2.5 屏是让二者互斥的下限,补屏与摘章都以它为准。
+ * MAX_LOADED 只是节点数上限:章节短到 3 章凑不够 2.5 屏时,以本条为准多留几章。
+ */
+const MIN_WINDOW_SCREENS = 2.5
 
 const scroller = ref<HTMLElement | null>(null)
 const proseEl = ref<HTMLElement | null>(null)
@@ -121,6 +131,8 @@ let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 let shifting = false
 /** 目录点进来要滚到的锚点 */
 let pendingAnchor = ''
+/** fillViewport 的代次:补齐途中又换了章(目录跳转 / 重开书)就让旧循环自己退出 */
+let fillSeq = 0
 
 // ---- 文内 / 全书查找 ----
 const findOpen = ref(false)
@@ -209,6 +221,7 @@ function resetTo(index: number, top = 0): void {
   b.releaseAssets()
   const first = makeChapter(index)
   if (!first) return
+  const seq = ++fillSeq
   loaded.value = [first]
   topIndex.value = index
   void nextTick(() => {
@@ -220,14 +233,57 @@ function resetTo(index: number, top = 0): void {
       if (target) {
         box.scrollTop += target.getBoundingClientRect().top - box.getBoundingClientRect().top - 12
       } else {
-        box.scrollTop = top
+        box.scrollTop = chapterTop(box, index) + top
       }
     } else {
-      box.scrollTop = top
+      // `top` 是"章内偏移"(persist 存的就是它),要加上这一章在容器里的起点。
+      // 直接 `scrollTop = top` 会少掉 prose-wrap 的顶部 padding + 首段 margin(实测 48px),
+      // 而且每开一次书就再少一次 —— 读者感觉是"每次打开都比上次退了两行"
+      box.scrollTop = chapterTop(box, index) + top
     }
     afterRender()
     emit('rendered')
+    void fillViewport(seq)
   })
+}
+
+/** 某一章的顶边在滚动内容里的位置(= 让它贴住视口顶部所需的 scrollTop) */
+function chapterTop(box: HTMLElement, index: number): number {
+  const el = proseEl.value?.querySelector<HTMLElement>(`.chap[data-index="${index}"]`)
+  if (!el) return 0
+  return el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop
+}
+
+function windowShort(box: HTMLElement): boolean {
+  return box.scrollHeight < box.clientHeight * MIN_WINDOW_SCREENS
+}
+
+/**
+ * 把窗口接到至少 MIN_WINDOW_SCREENS 屏高。
+ *
+ * 自动接章**只由 scroll 事件驱动**,而窗口里只有一章、这章又不满一屏时容器根本不可滚动 ——
+ * scroll 事件永不触发,于是"继续下滑,自动接下一章…"就那么挂着,怎么划都不动;
+ * 手动点目录跳到一个够长的章节才恢复正常(2026-09-03 用户反馈:《极简理财指南》
+ * 开篇是 337px 的版权页,视口 731px,开局即卡死)。所以渲染完先自己接够。
+ *
+ * 先往后接,到了书尾就往前接 —— 停在最后一个短章时也得能往回滚。
+ * 除了 resetTo,视口变高 / 字号调小让内容缩回不够时也会由 ResizeObserver 再调一次。
+ * 次数上限只是防呆:章节极短的书(语录 / 诗集)一屏要接好几章,但也不该无限接下去。
+ */
+async function fillViewport(seq: number): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    const box = scroller.value
+    if (!box || seq !== fillSeq || !book.value) return
+    if (!windowShort(box)) return
+    if (shifting) {
+      // 正好撞上 onScroll 触发的那次接章,等一帧让它落地再看(nextTick 在这儿会空转)
+      await new Promise((r) => setTimeout(r, 16))
+      continue
+    }
+    if (await appendNext()) continue
+    if (await prependPrev()) continue
+    return
+  }
 }
 
 function afterRender(): void {
@@ -250,47 +306,85 @@ function anchorTarget(root: HTMLElement | null, anchor: string): HTMLElement | n
   }
 }
 
-/** 往后接一章;窗口满了就摘掉最前面那章,并把 scrollTop 补回去 */
-async function appendNext(): Promise<void> {
+/**
+ * 以某一章为锚,在 DOM 增删前后保持它在视口里的位置不变。
+ *
+ * 比"加减被增删那块的高度"可靠:摘掉首章时第二章还会一并失去 `.chap + .chap` 的
+ * 上边距 / 上边框(41px),按 offsetHeight 减必然差这一截;而且 scrollTop 在中途那次 layout
+ * 里可能已被夹到新的最大值,再做加减就错位。锚元素由 Vue 按 key 复用,引用一直有效。
+ */
+async function keepAnchored(box: HTMLElement, anchorIndex: number, mutate: () => void): Promise<void> {
+  const anchor = proseEl.value?.querySelector<HTMLElement>(`.chap[data-index="${anchorIndex}"]`)
+  const before = anchor?.getBoundingClientRect().top ?? 0
+  mutate()
+  await nextTick()
+  if (anchor) box.scrollTop += anchor.getBoundingClientRect().top - before
+}
+
+/**
+ * 窗口超出 MAX_LOADED 时从某一端摘章,但**不许摘到不够 MIN_WINDOW_SCREENS 屏**。
+ * 摘完再量、不够就整章放回:章节极短的书(语录 / 诗集)3 章凑不满 2.5 屏,
+ * 摘了就回到"滚动条消失 / 前后接章打架"那两种死法。MAX_LOADED 是防节点树撑爆的上限,
+ * 不该拿可滚动性去换它。两次 nextTick 之间没有渲染机会,放回去不会闪。
+ */
+async function trim(box: HTMLElement, side: 'head' | 'tail'): Promise<void> {
+  while (loaded.value.length > MAX_LOADED) {
+    const kept = loaded.value
+    const keptTop = box.scrollTop
+    // 还在视口里的章绝不能摘:补屏时读者往往就停在窗口的这一端(开书在首章顶部、视口变高时更是),
+    // 摘了它锚点补偿会被夹到 0,眼前内容直接跳成下一章
+    const edge = side === 'head' ? kept[0]! : kept[kept.length - 1]!
+    const edgeEl = proseEl.value?.querySelector<HTMLElement>(`.chap[data-index="${edge.index}"]`)
+    if (edgeEl) {
+      const r = edgeEl.getBoundingClientRect()
+      const b = box.getBoundingClientRect()
+      if (side === 'head' ? r.bottom > b.top : r.top < b.bottom) return
+    }
+    // 摘头部要以第二章为锚补 scrollTop;摘尾部在视口下方,位置不受影响
+    const anchorIndex = side === 'head' ? kept[1]!.index : kept[0]!.index
+    await keepAnchored(box, anchorIndex, () => {
+      loaded.value = side === 'head' ? kept.slice(1) : kept.slice(0, -1)
+    })
+    if (windowShort(box)) {
+      loaded.value = kept
+      await nextTick()
+      box.scrollTop = keptTop
+      return
+    }
+  }
+}
+
+/** 往后接一章;窗口满了就从头部摘。返回是否真接上了 */
+async function appendNext(): Promise<boolean> {
   const box = scroller.value
   const last = loaded.value[loaded.value.length - 1]
-  if (shifting || !box || !last || last.index >= total.value - 1) return
+  if (shifting || !box || !last || last.index >= total.value - 1) return false
   const next = makeChapter(last.index + 1)
-  if (!next) return
+  if (!next) return false
   shifting = true
   loaded.value = [...loaded.value, next]
   await nextTick()
-  if (loaded.value.length > MAX_LOADED) {
-    const head = loaded.value[0]!
-    const el = proseEl.value?.querySelector<HTMLElement>(`.chap[data-index="${head.index}"]`)
-    const h = el?.offsetHeight ?? 0
-    loaded.value = loaded.value.slice(1)
-    await nextTick()
-    // 摘掉的是上方内容,浏览器不会自动补 scrollTop,不减就等于原地跳了一章
-    box.scrollTop -= h
-  }
+  await trim(box, 'head')
   afterRender()
   shifting = false
+  return true
 }
 
-/** 往前接一章;新内容加在上方,必须把 scrollTop 加上它的高度才不跳 */
-async function prependPrev(): Promise<void> {
+/** 往前接一章;新内容加在上方,以原首章为锚补 scrollTop 才不跳。返回是否真接上了 */
+async function prependPrev(): Promise<boolean> {
   const box = scroller.value
   const first = loaded.value[0]
-  if (shifting || !box || !first || first.index <= 0) return
+  if (shifting || !box || !first || first.index <= 0) return false
   const prev = makeChapter(first.index - 1)
-  if (!prev) return
+  if (!prev) return false
   shifting = true
-  const before = box.scrollHeight
-  loaded.value = [prev, ...loaded.value]
-  await nextTick()
-  box.scrollTop += box.scrollHeight - before
-  if (loaded.value.length > MAX_LOADED) {
-    loaded.value = loaded.value.slice(0, MAX_LOADED)
-    await nextTick()
-  }
+  await keepAnchored(box, first.index, () => {
+    loaded.value = [prev, ...loaded.value]
+  })
+  await trim(box, 'tail')
   afterRender()
   shifting = false
+  return true
 }
 
 /** 视口顶部落在哪一章 */
@@ -348,10 +442,12 @@ function onScroll(): void {
   if (!box) return
   pickTopIndex()
   updateProgress()
-  // 离底一屏就开始接下一章,读者滚到底时内容已经在了
+  // 离底一屏就开始接下一章,读者滚到底时内容已经在了。
+  // 两个条件在 ≥ MIN_WINDOW_SCREENS 屏的窗口里互斥;窗口撑不到那么高(全书就几页)时
+  // 两个都试 —— 接不上的那个立刻返回 false,不会打架
   const bottomGap = box.scrollHeight - box.clientHeight - box.scrollTop
   if (bottomGap < box.clientHeight) void appendNext()
-  else if (box.scrollTop < box.clientHeight * 0.5) void prependPrev()
+  if (box.scrollTop < box.clientHeight * 0.5) void prependPrev()
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
   scrollSaveTimer = setTimeout(persist, 250)
 }
@@ -426,10 +522,26 @@ watch(scroller, (el, old) => {
   el?.addEventListener('scroll', onScroll, { passive: true })
 })
 
+/**
+ * 视口变高(转屏 / 拉大窗口 / 进沉浸阅读)或正文变矮(调小字号 / 行距)都可能让原本够高的窗口
+ * 缩回不够 MIN_WINDOW_SCREENS 屏 —— 那时 scroll 事件同样不会来,得有人主动补。
+ * 补屏本身也会改正文高度触发回调,但 windowShort 一不成立就立刻返回,不会自激。
+ */
+let resizeObs: ResizeObserver | null = null
+watch([scroller, proseEl], ([box, prose]) => {
+  resizeObs?.disconnect()
+  resizeObs = null
+  if (!box) return
+  resizeObs = new ResizeObserver(() => void fillViewport(fillSeq))
+  resizeObs.observe(box)
+  if (prose) resizeObs.observe(prose)
+})
+
 onBeforeUnmount(() => {
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
   persist()
   scroller.value?.removeEventListener('scroll', onScroll)
+  resizeObs?.disconnect()
   closeBook()
 })
 

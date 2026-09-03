@@ -60,7 +60,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import { backend } from '@/core/backend'
 import { errMsg } from '@/core/errmsg'
-import { loadPdfjs, parsePdfTocSlug, pdfTocSlug, readOutline } from '@/core/pdf'
+import { PDF_ASSET_OPTIONS, loadPdfjs, parsePdfTocSlug, pdfTocSlug, readOutline } from '@/core/pdf'
 import { loadPos, savePos } from '@/core/reading-pos'
 import type { TocItem } from '@/core/markdown/pipeline'
 import Icon from '@/components/Icon.vue'
@@ -118,6 +118,13 @@ const doc = shallowRef<PDFDocumentProxy | null>(null)
 const canvases = new Map<number, HTMLCanvasElement>()
 const textHosts = new Map<number, HTMLElement>()
 const tasks = new Map<number, RenderTask>()
+/**
+ * 正在 paint 的页。`tasks` 要等 getPage 回来才登记,而 load 里 startObserving 会跑两遍
+ * (fitWidth 的 nextTick 里一遍、紧接着同步一遍),同一页的两次回调都能穿过 `tasks.has` ——
+ * 两次 render 抢同一块 canvas,pdf.js 直接抛 "same canvas during multiple render()",
+ * 抛的那次在 finally 里还会把另一次的 task 登记删掉,之后 release 就取消不到它了
+ */
+const inflight = new Set<number>()
 /** 已渲染的文本层,换页/缩放时要 cancel 掉,否则它会往已经清空的容器里继续塞 span */
 const textLayers = new Map<number, { cancel: () => void }>()
 /** 页原始尺寸(scale=1),缩放时据此重算占位 */
@@ -188,7 +195,7 @@ async function load(): Promise<void> {
     if (!res.ok) throw new Error(`读取失败(HTTP ${res.status})`)
     const data = new Uint8Array(await res.arrayBuffer())
     if (seq !== loadSeq) return
-    const d = await pdfjs.getDocument({ data }).promise
+    const d = await pdfjs.getDocument({ data, ...PDF_ASSET_OPTIONS }).promise
     if (seq !== loadSeq) {
       void d.loadingTask.destroy()
       return
@@ -259,18 +266,21 @@ async function paint(num: number): Promise<void> {
   const d = doc.value
   const canvas = canvases.get(num)
   const box = pages.value.find((p) => p.num === num)
-  if (!d || !canvas || !box || tasks.has(num) || box.painted) return
+  if (!d || !canvas || !box || inflight.has(num) || box.painted) return
+  inflight.add(num)
+  // 缩放可能落在下面任何一次 await 之间。按旧比例画出来的位图不能再标成 painted,
+  // 否则它会以错误的尺寸留在屏上,而新一轮 observer 一看 painted=true 就直接跳过它
+  const s = scale.value
   try {
     const page = await d.getPage(num)
-    if (!doc.value) return
+    if (!doc.value || scale.value !== s) return
     const base = page.getViewport({ scale: 1 })
     baseSizes.set(num, { w: base.width, h: base.height })
     // 各页尺寸可能不同(插页/横页),按实际尺寸校正占位
-    box.w = Math.round(base.width * scale.value)
-    box.h = Math.round(base.height * scale.value)
+    resizeBox(box, Math.round(base.width * s), Math.round(base.height * s))
     // 高分屏按 dpr 放大位图,否则字发虚
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const vp = page.getViewport({ scale: scale.value * dpr })
+    const vp = page.getViewport({ scale: s * dpr })
     canvas.width = Math.round(vp.width)
     canvas.height = Math.round(vp.height)
     canvas.style.width = `${box.w}px`
@@ -279,6 +289,7 @@ async function paint(num: number): Promise<void> {
     const task = page.render({ canvas, viewport: vp })
     tasks.set(num, task)
     await task.promise
+    if (scale.value !== s) return
     box.painted = true
 
     // 文本层用 **CSS 比例**的 viewport(它是 DOM 不是位图,不该乘 dpr),
@@ -286,13 +297,14 @@ async function paint(num: number): Promise<void> {
     const host = textHosts.get(num)
     if (host && doc.value) {
       const pdfjs = await loadPdfjs()
+      if (scale.value !== s) return
       textLayers.get(num)?.cancel()
       host.replaceChildren()
-      pdfjs.setLayerDimensions(host as HTMLDivElement, page.getViewport({ scale: scale.value }))
+      pdfjs.setLayerDimensions(host as HTMLDivElement, page.getViewport({ scale: s }))
       const layer = new pdfjs.TextLayer({
         textContentSource: page.streamTextContent(),
         container: host,
-        viewport: page.getViewport({ scale: scale.value }),
+        viewport: page.getViewport({ scale: s }),
       })
       textLayers.set(num, layer)
       await layer.render()
@@ -301,7 +313,36 @@ async function paint(num: number): Promise<void> {
     /* 取消或渲染失败:留占位,下次进入视野再试 */
   } finally {
     tasks.delete(num)
+    inflight.delete(num)
   }
+}
+
+/**
+ * 校正某页占位尺寸。
+ *
+ * 占位一开始全按第 1 页铺,这一页真实尺寸要等它被画时才知道(实测同一本书封面 966px 高、
+ * 正文页 979px,宽也差二十几像素)。改高度会让下方所有内容整体位移 —— 这一页若在视口**上方**
+ * (上一屏的预渲染就会画到它),读者眼前的内容就跟着跳。
+ *
+ * 补法是**量下一页的位移**而不是按差值加:Chromium(WebView2 / Android WebView)自带
+ * scroll anchoring,多数时候已经替我们把 scrollTop 调好了,再按 dh 加一次就是双倍
+ * (实测 dh=13 时 scrollTop 动了 26)。量出来的位移在被它处理过的场合是 0,没处理的场合才是 dh,
+ * 两种情况下都正确。
+ */
+function resizeBox(box: PageBox, w: number, h: number): void {
+  const changed = h !== box.h
+  const scrollBox = scroller.value
+  const el = scrollBox?.querySelector<HTMLElement>(`.pdf-page[data-page="${box.num}"]`)
+  // 整页都在视口上沿之上才需要补;骑在上沿的那页只有一部分在上方,补了反而多跳
+  const above = !!scrollBox && !!el && el.getBoundingClientRect().bottom <= scrollBox.getBoundingClientRect().top
+  const anchor = el?.nextElementSibling
+  const before = anchor?.getBoundingClientRect().top ?? 0
+  box.w = w
+  box.h = h
+  if (!changed || !above || !scrollBox || !anchor) return
+  void nextTick(() => {
+    scrollBox.scrollTop += anchor.getBoundingClientRect().top - before
+  })
 }
 
 function release(num: number): void {

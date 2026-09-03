@@ -91,8 +91,8 @@ markdown 与 html 文档都可用。
 | 类别 | 扩展名 | 能力 |
 |------|--------|------|
 | Markdown | md、markdown | 完整渲染;桌面可编辑 |
-| 电子书 | epub、mobi、prc | **下滑连着读**:滚到底自动接下一章(DOM 里只留相邻 3 章,滑动窗口两端进出并补偿滚动位置,所以上千章的书也不卡);目录跳章、记住读到第几章第几行;正文套用墨阅自己的排版旋钮(字体 / 行距 / 字距 / 纸色),书自带的 CSS 一律剥掉。**按需解压**——只解当前章,不把整包摊进内存(实测 1839 章 / 12MB 的 EPUB 冷启动 0.75 秒、2469 章 / 41MB 的 MOBI 0.84 秒)。EPUB 认 NCX 与 nav 两代目录;MOBI 支持 MOBI6 + PalmDOC 压缩,章名从章节分隔符后的正文就手提取(覆盖约 94%),Calibre 出的书(目录用 `<a filepos>` 排在书尾)目录与章节一一对应不重复;kindlegen 用来做缩进的 `<blockquote>` 一律拆平、书内指定的字色 / 字体一律剥掉,段落不会莫名带底色。不支持 DRM 加密、KF8 / AZW3(会提示用 Calibre 转 EPUB)、固定版式(漫画类) |
-| PDF | pdf | 连续滚动阅读 + PDF 自带书签当大纲 + 缩放/适宽 + 记住读到第几页。**只渲染视口附近几页**,离场即释放位图(实测 206 页的书常驻 3 个 canvas、堆内存 14MB)。**带文本层**,所以能选中、复制、查找。用 pdf.js 的 legacy 构建(自带 polyfill),老版 Android WebView 上也能开。PDF 是固定版式,排版旋钮对它无效 |
+| 电子书 | epub、mobi、prc | **下滑连着读**:滚到底自动接下一章(DOM 里只留相邻 3 章,滑动窗口两端进出并补偿滚动位置,所以上千章的书也不卡);**开篇是不满一屏的版权页 / 短章时会自动先接够**,不会出现"页脚写着继续下滑却划不动";章节很短的书(语录 / 诗集)前后翻都顺、不会越翻越往后;调字号 / 转屏后内容不卡住;重开书回到上次的精确位置;目录跳章、记住读到第几章第几行;正文套用墨阅自己的排版旋钮(字体 / 行距 / 字距 / 纸色),书自带的 CSS 一律剥掉。**按需解压**——只解当前章,不把整包摊进内存(实测 1839 章 / 12MB 的 EPUB 冷启动 0.75 秒、2469 章 / 41MB 的 MOBI 0.84 秒)。EPUB 认 NCX 与 nav 两代目录;MOBI 支持 MOBI6 + PalmDOC 压缩,章名从章节分隔符后的正文就手提取(覆盖约 94%),Calibre 出的书(目录用 `<a filepos>` 排在书尾)目录与章节一一对应不重复;kindlegen 用来做缩进的 `<blockquote>` 一律拆平、书内指定的字色 / 字体一律剥掉,段落不会莫名带底色。不支持 DRM 加密、KF8 / AZW3(会提示用 Calibre 转 EPUB)、固定版式(漫画类) |
+| PDF | pdf | 连续滚动阅读 + PDF 自带书签当大纲 + 缩放/适宽 + 记住读到第几页。**只渲染视口附近几页**,离场即释放位图(实测 206 页的书常驻 3 个 canvas、堆内存 14MB)。**带文本层**,所以能选中、复制、查找。用 pdf.js 的 legacy 构建(自带 polyfill),老版 Android WebView 上也能开;**解码器与 CJK 字体映射表随包携带**(JBIG2 / JPEG2000 / ICC 解码器 + GBK / UniGB 等 cMap):整页黑白扫描图的**扫描版 PDF 也能正常显示**,不会只出封面、后面全白;没嵌字体、只写了 GBK 编码的 PDF(常见于 OCR 扫描件与政务通知)**文字照样能选中、复制、查找**。PDF 是固定版式,排版旋钮对它无效 |
 | 图片 | png、jpg、jpeg、gif、webp、svg、ico、bmp | 预览 + 点击放大 |
 | HTML | html、htm | **渲染着读**,按文档自己有没有样式分两种:<br>· **自带 `<style>` / 行内样式 → 原样渲染**,与浏览器打开一致(卡片、网格、配色本身就是内容)。它的 CSS 会被套上作用域前缀再注入,不会泄到应用界面;`body{}` 规则改写到容器自身,`@import` 丢弃。这种模式下排版四旋钮不生效(文档有自己的设计)<br>· **裸 HTML(只有语义标签)→ 套阅读排版**,与 markdown 一个待遇<br>两种模式都会剥掉 script / 事件属性 / `javascript:` 链接,给标题补 id 进大纲,相对图片与仓库内链接照常可用;`Ctrl+/` 看源码,导出 HTML / PNG 长图都支持 |
 | 文本 | txt、sql、json、yml、yaml、xml、csv、js、ts、css、sh、py、java、properties、conf、ini、log | 只读代码视图(语法高亮 + 复制;json 可一键格式化)。编码自动识别:带 BOM 的 UTF-8 / UTF-16(如 Windows 的 `desktop.ini`)、UTF-8、GBK/GB18030 都能读 |
@@ -124,7 +124,7 @@ Tauri 2(Windows + Android 一套代码)· Vue 3 + TypeScript + Vite · markdown-
 ## 开发
 
 ```bash
-npm install        # postinstall 自动拷贝 Vditor 资源
+npm install        # postinstall 自动拷贝 Vditor 资源与 pdf.js 解码器 wasm / CJK 字体映射表
 npm run dev        # http://localhost:5173,本机零 Rust/零 VS Build Tools
 npm run typecheck
 ```

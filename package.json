@@ -2,7 +2,7 @@
   "name": "inkread",
   "productName": "墨阅",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.7.1",
   "type": "module",
   "description": "墨阅 —— 让每一篇 Markdown 静静展开,如书页般被阅读。",
   "scripts": {
@@ -10,7 +10,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
-    "postinstall": "node scripts/copy-vditor.mjs",
+    "postinstall": "node scripts/copy-vditor.mjs && node scripts/copy-pdfjs-assets.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

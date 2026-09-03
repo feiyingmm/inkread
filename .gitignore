@@ -9,3 +9,4 @@ dev-server/repos.local.json
 src-tauri/target/
 src-tauri/gen/
 public/vditor/
+public/pdfjs/

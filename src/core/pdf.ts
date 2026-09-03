@@ -18,6 +18,42 @@ export interface PdfOutlineItem {
   page: number
 }
 
+/** pdf.js 外部资源的根目录(由 `scripts/copy-pdfjs-assets.mjs` 在 postinstall 时拷进 public/,不入 git) */
+const PDF_ASSET_ROOT = new URL(`${import.meta.env.BASE_URL}pdfjs/`, location.origin).href
+
+/**
+ * `getDocument` 必须带上的资源参数。pdf.js 6 把两类东西拆出了主包、运行时按地址现取,不给就静默出错:
+ *
+ * - **`wasmUrl`**:JBIG2 / JPEG2000 / ICC 三个解码器。缺了,扫描版 PDF(正文是整页 JBIG2 黑白图)
+ *   会**整页画成白纸** —— 更糙的是渲染任务照样 resolve,只在 console 里 warn 一句
+ *   `Ensure that the wasmUrl API parameter is provided`(2026-09-03 用户反馈:《初入股市炒股大全》
+ *   只有 JPEG 封面那页正常,后面 382 页全白)。
+ * - **`cMapUrl` + `cMapPacked`**:CJK 字体的 CID→Unicode 映射表。缺了,**没有嵌入字体程序、
+ *   只写了 `GBK-EUC-H` / `UniGB-UCS2-H` 这类编码的字体**整个加载失败(`loadFont - translateFont failed`),
+ *   文本层一个 span 都不出 —— 画面还在(扫描图),但选中 / 复制 / 查找全废(2026-09-03 本机 135 本 PDF
+ *   扫出 6 本这样的,多是 OCR 过的扫描件与政务通知)。
+ *
+ * 三处讲究:
+ * - **必须是绝对地址**:这个前缀会在 **worker 里**被直接拼成 `import()` 地址(wasm 起不来时
+ *   走 `*_nowasm_fallback.js` 的那条回退路径),相对路径会按 worker 脚本(打包后落在 /assets/ 下)
+ *   解析而不是按页面;用 `BASE_URL + origin` 也顺带避开将来页面 URL 带路径时的相对解析。
+ * - **末尾斜杠不能少**:pdf.js 直接字符串拼文件名,缺了会抛 `Invalid factory url`。
+ * - **`useWorkerFetch: false` 是显式钉死的**:资源字节由**主线程** fetch 后经消息传进 worker。
+ *   主线程取同源静态资源在 Tauri 桌面端与 Android 上都是走通了的路(`/assets/*`、字体都这么取),
+ *   而"worker 里 fetch 自定义协议下的资源"没在真机上验过。不写这一项的话,pdf.js 会在
+ *   cMapUrl / standardFontDataUrl / wasmUrl 三者齐全时自动切成 worker 直接取 —— 将来补上
+ *   standardFontDataUrl 时这条边界不能跟着悄悄变。
+ *
+ * 没给 `standardFontDataUrl`(820KB 的标准 14 字体):浏览器里 pdf.js 默认 `useSystemFonts`,
+ * 非嵌入的 Helvetica / Times 之类直接用系统字体替代,本机 135 本 PDF 无一告警,暂不携带。
+ */
+export const PDF_ASSET_OPTIONS = {
+  wasmUrl: `${PDF_ASSET_ROOT}wasm/`,
+  cMapUrl: `${PDF_ASSET_ROOT}cmaps/`,
+  cMapPacked: true,
+  useWorkerFetch: false,
+} as const
+
 let loading: Promise<typeof import('pdfjs-dist')> | null = null
 
 /**

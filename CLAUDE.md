@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 常用命令
 
 ```bash
-npm install          # postinstall 自动把 node_modules/vditor/dist 拷到 public/vditor(不入 git)
+npm install          # postinstall 拷 vditor/dist → public/vditor、pdfjs-dist/{wasm,cmaps} → public/pdfjs/(均不入 git)
 npm run dev          # http://localhost:5173 —— 浏览器里开发全部真实功能,本机零 Rust
 npm run typecheck    # vue-tsc --noEmit(没有 lint、没有单测,这就是全部静态检查)
 npm run build        # typecheck + vite build → dist/(tauri build 的 beforeBuildCommand)
